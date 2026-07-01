@@ -1,8 +1,8 @@
 name: Actualizar Tasas Automáticamente
 on:
   schedule:
-    - cron: '*/15 * * * *' # Esto le dice a GitHub: "ejecútalo cada 15 minutos"
-  workflow_dispatch: # Esto permite que tú lo ejecutes manualmente desde el botón de la web
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,13 +14,9 @@ jobs:
         with:
           python-version: '3.9'
       - name: Instalar dependencias
-        run: pip install supabase python-dotenv
+        run: pip install supabase python-dotenv requests
       - name: Ejecutar Extractor
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: |
-          echo "Contenido de la carpeta actual:"
-          ls -R
-          echo "Intentando ejecutar extractor..."
-          python extractor.py || python dolar_backend/extractor.py
+        run: python dolar_backend/extractor.py
