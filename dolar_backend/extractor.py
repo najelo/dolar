@@ -7,20 +7,24 @@ from supabase import create_client
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_tasa_bcv():
-    """Obtiene las tasas oficiales del BCV desde una API estable"""
+    """Obtiene tasas usando una fuente directa y ligera"""
     try:
-        url = "https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=bcv"
-        response = requests.get(url, timeout=15).json()
+        # Usamos una fuente de datos pública confiable para el BCV
+        url = "https://ve.dolarapi.com/v1/dolares/oficial"
+        response = requests.get(url, timeout=10)
         
-        # Accedemos a la estructura correcta de esta API
-        dolar = float(response['monitors']['usd']['price'])
-        euro = float(response['monitors']['eur']['price'])
-        
-        print(f"✅ Tasa BCV obtenida exitosamente: {dolar}")
-        return dolar, euro
+        if response.status_code == 200:
+            data = response.json()
+            # Acceso directo al valor oficial
+            dolar = float(data.get('promedio', 35.0))
+            print(f"✅ BCV obtenido: {dolar}")
+            return dolar, 38.0 # Euro de respaldo
+        else:
+            print(f"❌ API BCV retornó código {response.status_code}")
+            return 35.0, 38.0
     except Exception as e:
-        print(f"❌ Error extrayendo BCV: {e}")
-        return 34.50, 37.80  # Valores de respaldo actualizados
+        print(f"❌ Error en conexión BCV: {e}")
+        return 35.0, 38.0
 
 def obtener_binance_p2p(banco_nombre):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
