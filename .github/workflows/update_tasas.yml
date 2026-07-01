@@ -19,4 +19,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python extractor.py
+        run: |
+          echo "Contenido de la carpeta actual:"
+          ls -R
+          echo "Intentando ejecutar extractor..."
+          python extractor.py || python dolar_backend/extractor.py
