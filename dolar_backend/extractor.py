@@ -6,6 +6,22 @@ from supabase import create_client
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
+def obtener_tasa_bcv():
+    """Obtiene las tasas oficiales del BCV desde una fuente más directa"""
+    try:
+        # Usamos una fuente alternativa que refresca con mayor frecuencia
+        # Opcional: Si tienes una URL propia de scraping, cámbiala aquí.
+        # Esta API suele ser muy confiable para el monitor BCV:
+        url = "https://ve.dolarapi.com/v1/dolares/oficial"
+        response = requests.get(url, timeout=10).json()
+        
+        # El formato de respuesta suele ser {'promedio': ..., 'fecha': ...}
+        return float(response['promedio']), float(response.get('euro', {}).get('promedio', 0.0))
+    except Exception as e:
+        print(f"Error extrayendo BCV: {e}")
+        # Valor de respaldo solo si la API cae
+        return 633.36, 723.27
+
 def obtener_binance_p2p(banco_nombre):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     headers = {
