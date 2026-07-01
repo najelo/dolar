@@ -7,23 +7,24 @@ from supabase import create_client
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_tasa_bcv():
-    """Obtiene las tasas oficiales del BCV correctamente"""
+    """Versión de diagnóstico para ver qué responde la API"""
     try:
         url = "https://ve.dolarapi.com/v1/dolares/oficial"
-        response = requests.get(url, timeout=10).json()
+        response = requests.get(url, timeout=15)
         
-        # La API devuelve: {'moneda': 'USD', 'promedio': 36.5, ...}
-        # A veces el objeto euro viene separado.
-        dolar = float(response.get('promedio', 633.36))
+        # Imprimimos la respuesta cruda en el log de GitHub
+        print(f"Respuesta cruda de la API: {response.text}")
         
-        # Intentamos obtener el euro, si falla, usamos el dólar como base o valor fijo
-        euro_url = "https://ve.dolarapi.com/v1/euros/oficial"
-        euro_response = requests.get(euro_url, timeout=10).json()
-        euro = float(euro_response.get('promedio', 723.27))
+        data = response.json()
+        dolar = float(data.get('promedio', 0))
         
-        return dolar, euro
+        # Si llega a cero, forzamos a que veamos qué pasó
+        if dolar == 0:
+            print("La API respondió pero el valor promedio es 0.")
+            
+        return dolar, 723.27
     except Exception as e:
-        print(f"Error extrayendo BCV: {e}")
+        print(f"ERROR TOTAL al conectar con API BCV: {e}")
         return 633.36, 723.27
 
 def obtener_binance_p2p(banco_nombre):
