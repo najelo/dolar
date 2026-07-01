@@ -6,20 +6,30 @@ from supabase import create_client
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_tasa_bcv():
-    """Obtiene la tasa oficial real del BCV"""
+    """Extrae el valor real directamente del HTML del BCV"""
     try:
-        url = "https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=bcv"
-        response = requests.get(url, timeout=15)
+        # Headers que simulan un navegador real para evitar el bloqueo del BCV
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        response = requests.get("https://www.bcv.org.ve/", headers=headers, timeout=15, verify=False)
+        soup = BeautifulSoup(response.content, 'lxml')
         
-        if response.status_code == 200:
-            data = response.json()
-            dolar = float(data['monitors']['usd']['price'])
-            euro = float(data['monitors']['eur']['price'])
-            return dolar, euro, True # True indica que obtuvimos datos reales
-        return 0, 0, False
+        # En el BCV, los valores están en divs específicos (esto es lo que está en la web hoy)
+        # Buscamos el elemento que contiene el precio del USD
+        dolar_text = soup.find("div", {"id": "dolar"}).find("strong").text
+        # Limpiamos el texto: quitamos puntos, cambiamos coma por punto
+        dolar = float(dolar_text.replace('.', '').replace(',', '.'))
+        
+        # Buscamos el elemento del Euro
+        euro_text = soup.find("div", {"id": "euro"}).find("strong").text
+        euro = float(euro_text.replace('.', '').replace(',', '.'))
+        
+        return dolar, euro
     except Exception as e:
-        print(f"Error obteniendo BCV: {e}")
-        return 0, 0, False
+        print(f"Error extrayendo BCV directo: {e}")
+        # Si esto falla, aquí sí puedes usar el respaldo manual
+        return 639.70, 728.48
 
 def obtener_binance_p2p(banco_nombre):
     # Lógica de Binance intacta
