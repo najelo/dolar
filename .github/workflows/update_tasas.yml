@@ -2,8 +2,8 @@ name: Actualizar Tasas Automaticamente
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Se ejecuta cada 15 min
-  workflow_dispatch: # Te permite darle al botón "Run workflow" manualmente
+    - cron: '*/15 * * * *' # Cada 15 minutos
+  workflow_dispatch: # Botón de ejecución manual
 
 jobs:
   build:
@@ -18,12 +18,11 @@ jobs:
 
       - name: Instalar dependencias
         run: |
-          pip install supabase python-dotenv
+          pip install -r dolar_backend/requirements.txt
           
       - name: Ejecutar Extractor
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          # Asegúrate de que la ruta sea exactamente la carpeta donde está tu archivo .py
-          python dolar_backend/tu_archivo_extractor.py
+          python dolar_backend/extractor.py
