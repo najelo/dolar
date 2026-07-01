@@ -25,25 +25,33 @@ def obtener_tasa_bcv(moneda):
     except Exception as e:
         print(f"Error BCV ({moneda}): {e}")
         return 0.0
-
 def obtener_tasas_binance_detalladas():
     try:
         url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-        data = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "page": 1, "rows": 10, "payTypes": ["ALL"]}
+        # Aumentamos rows a 20 para tener más opciones de donde leer
+        data = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "page": 1, "rows": 20, "payTypes": ["ALL"]}
         response = requests.post(url, json=data, timeout=15).json()
         
         tasas = {"Binance": 0.0, "Banesco": 0.0, "Mercantil": 0.0, "BDV": 0.0, "PagoMovil": 0.0}
         
         if 'data' in response and len(response['data']) > 0:
+            # Tomamos la primera tasa disponible como referencia general
             tasas["Binance"] = float(response['data'][0]['adv']['price'])
+            
+            # Buscamos en los anuncios
             for item in response['data']:
                 precio = float(item['adv']['price'])
-                metodos = [m['tradeMethodName'] for m in item['adv']['tradeMethods']]
+                # Convertimos todo a minúsculas para evitar errores de escritura
+                metodos = [m['tradeMethodName'].lower() for m in item['adv']['tradeMethods']]
+                
                 for m in metodos:
-                    if "Banesco" in m and tasas["Banesco"] == 0: tasas["Banesco"] = precio
-                    if "Mercantil" in m and tasas["Mercantil"] == 0: tasas["Mercantil"] = precio
-                    if "Venezuela" in m and tasas["BDV"] == 0: tasas["BDV"] = precio
-                    if "Pago Movil" in m and tasas["PagoMovil"] == 0: tasas["PagoMovil"] = precio
+                    if "banesco" in m and tasas["Banesco"] == 0: tasas["Banesco"] = precio
+                    if "mercantil" in m and tasas["Mercantil"] == 0: tasas["Mercantil"] = precio
+                    if "venezuela" in m or "bdv" in m and tasas["BDV"] == 0: tasas["BDV"] = precio
+                    if "pago movil" in m or "pago móvil" in m and tasas["PagoMovil"] == 0: tasas["PagoMovil"] = precio
+        
+        # DEBUG: Imprimir para ver qué encontró el script en los logs
+        print(f"DEBUG TASAS ENCONTRADAS: {tasas}")
         return tasas
     except Exception as e:
         print(f"Error Binance: {e}")
