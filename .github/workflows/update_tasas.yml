@@ -2,7 +2,7 @@ name: Actualizar Tasas Automaticamente
 
 on:
   schedule:
-    - cron: "0 * * * *" # Se ejecuta al minuto 0 de cada hora
+    - cron: '*/15 * * * *' # Se ejecuta al minuto 0 de cada hora
   workflow_dispatch: # Te permite ejecutarlo manualmente desde GitHub
 
 jobs:
