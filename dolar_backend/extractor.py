@@ -9,28 +9,22 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 def obtener_tasa_bcv():
     """Extrae el valor real directamente del HTML del BCV"""
     try:
-        # Headers que simulan un navegador real para evitar el bloqueo del BCV
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
         response = requests.get("https://www.bcv.org.ve/", headers=headers, timeout=15, verify=False)
         soup = BeautifulSoup(response.content, 'lxml')
         
-        # En el BCV, los valores están en divs específicos (esto es lo que está en la web hoy)
-        # Buscamos el elemento que contiene el precio del USD
         dolar_text = soup.find("div", {"id": "dolar"}).find("strong").text
-        # Limpiamos el texto: quitamos puntos, cambiamos coma por punto
         dolar = float(dolar_text.replace('.', '').replace(',', '.'))
         
-        # Buscamos el elemento del Euro
         euro_text = soup.find("div", {"id": "euro"}).find("strong").text
         euro = float(euro_text.replace('.', '').replace(',', '.'))
         
-        return dolar, euro
+        return dolar, euro, True # Retornamos los 3 valores correctamente
     except Exception as e:
         print(f"Error extrayendo BCV directo: {e}")
-        # Si esto falla, aquí sí puedes usar el respaldo manual
-        return 639.70, 728.48
+        return 0, 0, False # Fallo
 
 def obtener_binance_p2p(banco_nombre):
     # Lógica de Binance intacta
