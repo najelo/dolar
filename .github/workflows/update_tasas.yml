@@ -2,27 +2,28 @@ name: Actualizar Tasas Automaticamente
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Se ejecuta al minuto 0 de cada hora
-  workflow_dispatch: # Te permite ejecutarlo manualmente desde GitHub
+    - cron: '*/15 * * * *' # Se ejecuta cada 15 min
+  workflow_dispatch: # Te permite darle al botón "Run workflow" manualmente
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v3
-
+      - uses: actions/checkout@v4
+      
       - name: Configurar Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.12'
 
       - name: Instalar dependencias
-        # Asegúrate de que este archivo exista en tu carpeta dolar_backend
-        run: pip install -r dolar_backend/requirements.txt
-
+        run: |
+          pip install supabase python-dotenv
+          
       - name: Ejecutar Extractor
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python dolar_backend/extractor.py
+        run: |
+          # Asegúrate de que la ruta sea exactamente la carpeta donde está tu archivo .py
+          python dolar_backend/tu_archivo_extractor.py
