@@ -43,11 +43,15 @@ def obtener_tasa_binance():
         }
         response = requests.post(url, json=data, timeout=10).json()
         
+        # --- LÍNEA DE DEBUG ---
+        print(f"DEBUG RESPUESTA BINANCE: {response}") 
+        # ----------------------
+        
         if 'data' in response and len(response['data']) > 0:
             return float(response['data'][0]['adv']['price'])
         return 0.0
     except Exception as e:
-        print(f"Error Binance: {e}")
+        print(f"Error Binance detallado: {e}")
         return 0.0
 
 def ejecutar_actualizacion():
