@@ -34,14 +34,19 @@ def obtener_tasas_binance_detalladas():
         
         tasas = {"Binance": 0.0, "Banesco": 0.0, "Mercantil": 0.0, "BDV": 0.0, "PagoMovil": 0.0}
         
-        if 'data' in response and len(response['data']) > 0:
-            # Tomamos la primera tasa disponible como referencia general
+       if 'data' in response and len(response['data']) > 0:
             tasas["Binance"] = float(response['data'][0]['adv']['price'])
             
-            # Buscamos en los anuncios
+            # --- NUEVO CÓDIGO DE DIAGNÓSTICO ---
+            todos_los_metodos = []
+            for item in response['data']:
+                for m in item['adv']['tradeMethods']:
+                    todos_los_metodos.append(m['tradeMethodName'])
+            print(f"DEBUG: Métodos de pago encontrados en Binance: {set(todos_los_metodos)}")
+            # ------------------------------------
+
             for item in response['data']:
                 precio = float(item['adv']['price'])
-                # Convertimos todo a minúsculas para evitar errores de escritura
                 metodos = [m['tradeMethodName'].lower() for m in item['adv']['tradeMethods']]
                 
                 for m in metodos:
