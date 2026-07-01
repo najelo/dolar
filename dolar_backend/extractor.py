@@ -21,7 +21,6 @@ def ejecutar_actualizacion():
         print(f"\n[{time.strftime('%H:%M:%S')}] Iniciando ciclo de extracción...")
         
         # --- AQUÍ VA TU LÓGICA DE EXTRACCIÓN ---
-        # Mantendremos tus valores de ejemplo por ahora
         tasa_banesco = 734.89
         tasa_mercantil = 735.00
         tasa_bdv = 735.00
@@ -31,7 +30,7 @@ def ejecutar_actualizacion():
         tasa_binance_promedio = round((tasa_banesco + tasa_mercantil + tasa_bdv + tasa_pagomovil) / 4, 2)
         # ----------------------------------------
 
-        # Guardar en Supabase
+        # 1. Guardar/Actualizar tasa actual en la tabla principal (tasas_monitoreo)
         supabase.table("tasas_monitoreo").upsert({
             "id": 1,
             "bcv": tasa_bcv,
@@ -41,12 +40,19 @@ def ejecutar_actualizacion():
             "binance_bdv": tasa_bdv,
             "binance_pagomovil": tasa_pagomovil
         }).execute()
+
+        # 2. Guardar en el histórico (historial_tasas)
+        # Registramos las dos tasas principales que consultamos
+        supabase.table("historial_tasas").insert([
+            {"banco": "BCV", "valor": tasa_bcv},
+            {"banco": "BINANCE", "valor": tasa_binance_promedio}
+        ]).execute()
         
-        print("🟩 Sincronización Exitosa -> Datos guardados en Supabase.")
+        print("🟩 Sincronización Exitosa -> Datos actualizados y guardados en historial.")
 
     except Exception as e:
         print(f"❌ Error al subir los datos a Supabase: {e}")
-        exit(1) # Salir con error para que GitHub Actions lo marque en rojo
+        exit(1)
 
 if __name__ == "__main__":
     print("🚀 Extractor Ejecutándose en GitHub Actions...")
