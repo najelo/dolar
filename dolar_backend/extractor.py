@@ -27,35 +27,45 @@ def obtener_tasa_bcv(moneda):
         return 0.0
 
 def obtener_tasas_binance_detalladas():
-    """Extrae precios P2P para diferentes bancos configurados"""
     try:
         url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-        data = {
-            "asset": "USDT", "fiat": "VES", "tradeType": "BUY",
-            "page": 1, "rows": 20, "payTypes": ["ALL"]
-        }
+        data = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "page": 1, "rows": 10, "payTypes": ["ALL"]}
         response = requests.post(url, json=data, timeout=15).json()
         
-        # Diccionario para guardar el primer precio encontrado por cada banco
-        resultados = {"Banesco": 0.0, "Mercantil": 0.0, "BDV": 0.0, "PagoMovil": 0.0}
+        # Agregamos 'Binance' (promedio o primera tasa) al diccionario
+        tasas = {"Binance": 0.0, "Banesco": 0.0, "Mercantil": 0.0, "BDV": 0.0, "PagoMovil": 0.0}
         
         if 'data' in response:
+            # Capturamos la primera tasa general para la columna 'binance'
+            if len(response['data']) > 0:
+                tasas["Binance"] = float(response['data'][0]['adv']['price'])
+            
+            # Capturamos las tasas por banco
             for item in response['data']:
                 precio = float(item['adv']['price'])
-                # Obtenemos los nombres de los métodos de pago del anuncio
                 metodos = [m['tradeMethodName'] for m in item['adv']['tradeMethods']]
-                
-                # Clasificación simple por palabras clave en el nombre del método
                 for m in metodos:
-                    if "Banesco" in m and resultados["Banesco"] == 0: resultados["Banesco"] = precio
-                    if "Mercantil" in m and resultados["Mercantil"] == 0: resultados["Mercantil"] = precio
-                    if "Venezuela" in m and resultados["BDV"] == 0: resultados["BDV"] = precio
-                    if "Pago Movil" in m and resultados["PagoMovil"] == 0: resultados["PagoMovil"] = precio
-        
-        return resultados
+                    if "Banesco" in m and tasas["Banesco"] == 0: tasas["Banesco"] = precio
+                    if "Mercantil" in m and tasas["Mercantil"] == 0: tasas["Mercantil"] = precio
+                    if "Venezuela" in m and tasas["BDV"] == 0: tasas["BDV"] = precio
+                    if "Pago Movil" in m and tasas["PagoMovil"] == 0: tasas["PagoMovil"] = precio
+        return tasas
     except Exception as e:
         print(f"Error Binance: {e}")
-        return {"Banesco": 0.0, "Mercantil": 0.0, "BDV": 0.0, "PagoMovil": 0.0}
+        return {"Binance": 0.0, "Banesco": 0.0, "Mercantil": 0.0, "BDV": 0.0, "PagoMovil": 0.0}
+
+# En tu función ejecutar_actualizacion:
+supabase.table("tasas_monitoreo").upsert({
+    "id": 1,
+    "bcv_dolar": tasa_dolar,
+    "bcv_euro": tasa_euro,
+    "binance": tasas_b["Binance"],        # <--- Nueva línea
+    "binance_banesco": tasas_b["Banesco"],
+    "binance_mercantil": tasas_b["Mercantil"],
+    "binance_bdv": tasas_b["BDV"],
+    "binance_pagomovil": tasas_b["PagoMovil"],
+    "ultima_actualizacion": datetime.now().isoformat()
+}).execute()
 
 def ejecutar_actualizacion():
     tasa_dolar = obtener_tasa_bcv("dolar")
