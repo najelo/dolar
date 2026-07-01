@@ -16,29 +16,26 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def ejecutar_actualizacion():
     try:
-        print(f"\n[{time.strftime('%H:%M:%S')}] Iniciando ciclo de extracción...")
+        # El print ayuda a ver el progreso en los logs de GitHub Actions
+        print(f"[{time.strftime('%H:%M:%S')}] Iniciando ciclo de extracción...")
         
-        # 1. VALORACIÓN DE DATOS: Asegúrate de que aquí entran los valores reales
+        # Tasas
         tasa_banesco = 734.89
         tasa_mercantil = 735.00
         tasa_bdv = 735.00
         tasa_pagomovil = 735.00
         tasa_binance_promedio = round((tasa_banesco + tasa_mercantil + tasa_bdv + tasa_pagomovil) / 4, 2)
         
-        # OJO: Si aquí recibes un monto incorrecto, el problema está en la fuente de datos
         tasa_bcv_dolar = 633.36
         tasa_bcv_euro = 680.50 
         
-        # Validar que los montos sean mayores a 0 para evitar errores de lógica
         if tasa_bcv_euro <= 0 or tasa_bcv_dolar <= 0:
-            print("❌ Error: Valores detectados como 0 o negativos. Abortando para no dañar DB.")
+            print("❌ Error: Valores detectados como 0 o negativos. Abortando.")
             return
 
-        # 2. OBTENER DATOS ACTUALES DE SUPABASE PARA COMPARAR
         db_actual = supabase.table("tasas_monitoreo").select("*").eq("id", 1).execute().data
         tasa_db = db_actual[0] if db_actual else {}
 
-        # 3. ACTUALIZAR TASA ACTUAL
         supabase.table("tasas_monitoreo").upsert({
             "id": 1,
             "bcv_dolar": tasa_bcv_dolar,
@@ -50,8 +47,6 @@ def ejecutar_actualizacion():
             "binance_pagomovil": tasa_pagomovil
         }).execute()
 
-        # 4. HISTORIAL INTELIGENTE: Solo insertar si el valor de BCV Dólar o Euro ha cambiado
-        # Comparar con lo que ya está en la DB
         if tasa_bcv_euro != tasa_db.get('bcv_euro') or tasa_bcv_dolar != tasa_db.get('bcv_dolar'):
             fecha_actual = datetime.now().isoformat()
             datos_historial = [
@@ -70,7 +65,5 @@ def ejecutar_actualizacion():
         print(f"❌ Error crítico: {e}")
 
 if __name__ == "__main__":
-    # Si quieres que corra cada 15 min, puedes usar este bucle o un cronjob
-    while True:
-        ejecutar_actualizacion()
-        time.sleep(900) # Espera 15 minutos (900 segundos)
+    # SIN bucle para permitir que GitHub Actions finalice exitosamente
+    ejecutar_actualizacion()
