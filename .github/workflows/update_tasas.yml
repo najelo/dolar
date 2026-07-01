@@ -1,28 +1,22 @@
-name: Actualizar Tasas Automaticamente
-
+name: Actualizar Tasas Automáticamente
 on:
   schedule:
-    - cron: '*/15 * * * *' # Cada 15 minutos
-  workflow_dispatch: # Botón de ejecución manual
+    - cron: '*/15 * * * *' # Esto le dice a GitHub: "ejecútalo cada 15 minutos"
+  workflow_dispatch: # Esto permite que tú lo ejecutes manualmente desde el botón de la web
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
-
+          python-version: '3.9'
       - name: Instalar dependencias
-        run: |
-          pip install -r dolar_backend/requirements.txt
-          
+        run: pip install supabase python-dotenv
       - name: Ejecutar Extractor
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: |
-          python dolar_backend/extractor.py
+        run: python extractor.py
