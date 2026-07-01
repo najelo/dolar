@@ -8,23 +8,28 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_binance_p2p(banco_nombre):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    # El User-Agent es clave para que Binance no bloquee la petición
     headers = {
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0'
     }
+    # Payload ajustado para buscar anuncios reales de compra de USDT con VES
     payload = {
-        "asset": "USDT", "fiat": "VES", "tradeType": "BUY",
-        "payTypes": [banco_nombre], "rows": 1, "page": 1
+        "asset": "USDT", 
+        "fiat": "VES", 
+        "tradeType": "BUY", # Tú quieres comprar USDT con bolívares
+        "payTypes": [banco_nombre], 
+        "rows": 1, 
+        "page": 1,
+        "proMerchantAds": False # Cambiar a True si quieres precios de comerciantes verificados
     }
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=15).json()
         if resp.get('data') and len(resp['data']) > 0:
+            # Capturamos el precio del primer anuncio disponible
             return float(resp['data'][0]['adv']['price'])
     except Exception as e:
-        print(f"Error extrayendo {banco_nombre}: {e}")
+        print(f"Error técnico en {banco_nombre}: {e}")
     return 0.0
-
 def main():
     # Valores de respaldo (evitan el error NOT NULL)
     bcv_usd, bcv_eur = 633.36, 723.27 
