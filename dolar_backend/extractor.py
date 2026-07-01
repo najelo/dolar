@@ -1,9 +1,9 @@
 import os
-import time
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
+# Cargar variables de entorno
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -16,10 +16,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def ejecutar_actualizacion():
     try:
-        # El print ayuda a ver el progreso en los logs de GitHub Actions
-        print(f"[{time.strftime('%H:%M:%S')}] Iniciando ciclo de extracción...")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Iniciando ciclo de extracción...")
         
-        # Tasas
+        # Tasas (Aquí colocarás tu lógica de scraping o valores)
         tasa_banesco = 734.89
         tasa_mercantil = 735.00
         tasa_bdv = 735.00
@@ -33,9 +32,11 @@ def ejecutar_actualizacion():
             print("❌ Error: Valores detectados como 0 o negativos. Abortando.")
             return
 
+        # 1. Obtener estado actual en Supabase
         db_actual = supabase.table("tasas_monitoreo").select("*").eq("id", 1).execute().data
         tasa_db = db_actual[0] if db_actual else {}
 
+        # 2. Actualizar tasa actual (Upsert)
         supabase.table("tasas_monitoreo").upsert({
             "id": 1,
             "bcv_dolar": tasa_bcv_dolar,
@@ -47,6 +48,7 @@ def ejecutar_actualizacion():
             "binance_pagomovil": tasa_pagomovil
         }).execute()
 
+        # 3. Historial inteligente (Insert)
         if tasa_bcv_euro != tasa_db.get('bcv_euro') or tasa_bcv_dolar != tasa_db.get('bcv_dolar'):
             fecha_actual = datetime.now().isoformat()
             datos_historial = [
@@ -57,7 +59,7 @@ def ejecutar_actualizacion():
             supabase.table("historial_tasas").insert(datos_historial).execute()
             print("🟩 Cambio detectado: Historial actualizado.")
         else:
-            print("ℹ️ Sin cambios en tasas BCV. Historial omitido.")
+            print("ℹ️ Sin cambios. Historial omitido.")
 
         print("🟩 Sincronización Exitosa.")
 
@@ -65,5 +67,4 @@ def ejecutar_actualizacion():
         print(f"❌ Error crítico: {e}")
 
 if __name__ == "__main__":
-    # SIN bucle para permitir que GitHub Actions finalice exitosamente
     ejecutar_actualizacion()
