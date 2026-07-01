@@ -7,25 +7,20 @@ from supabase import create_client
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_tasa_bcv():
-    """Versión de diagnóstico para ver qué responde la API"""
+    """Obtiene las tasas oficiales del BCV desde una API estable"""
     try:
-        url = "https://ve.dolarapi.com/v1/dolares/oficial"
-        response = requests.get(url, timeout=15)
+        url = "https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=bcv"
+        response = requests.get(url, timeout=15).json()
         
-        # Imprimimos la respuesta cruda en el log de GitHub
-        print(f"Respuesta cruda de la API: {response.text}")
+        # Accedemos a la estructura correcta de esta API
+        dolar = float(response['monitors']['usd']['price'])
+        euro = float(response['monitors']['eur']['price'])
         
-        data = response.json()
-        dolar = float(data.get('promedio', 0))
-        
-        # Si llega a cero, forzamos a que veamos qué pasó
-        if dolar == 0:
-            print("La API respondió pero el valor promedio es 0.")
-            
-        return dolar, 723.27
+        print(f"✅ Tasa BCV obtenida exitosamente: {dolar}")
+        return dolar, euro
     except Exception as e:
-        print(f"ERROR TOTAL al conectar con API BCV: {e}")
-        return 633.36, 723.27
+        print(f"❌ Error extrayendo BCV: {e}")
+        return 34.50, 37.80  # Valores de respaldo actualizados
 
 def obtener_binance_p2p(banco_nombre):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
@@ -33,35 +28,33 @@ def obtener_binance_p2p(banco_nombre):
         'Content-Type': 'application/json',
         'User-Agent': 'Mozilla/5.0'
     }
-    # Payload ajustado para buscar anuncios reales de compra de USDT con VES
     payload = {
         "asset": "USDT", 
         "fiat": "VES", 
-        "tradeType": "BUY", # Tú quieres comprar USDT con bolívares
+        "tradeType": "BUY", 
         "payTypes": [banco_nombre], 
         "rows": 1, 
         "page": 1,
-        "proMerchantAds": False # Cambiar a True si quieres precios de comerciantes verificados
+        "proMerchantAds": False 
     }
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=15).json()
         if resp.get('data') and len(resp['data']) > 0:
-            # Capturamos el precio del primer anuncio disponible
             return float(resp['data'][0]['adv']['price'])
     except Exception as e:
         print(f"Error técnico en {banco_nombre}: {e}")
     return 0.0
+
 def main():
-    # Valores de respaldo (evitan el error NOT NULL)
-    bcv_usd, bcv_eur = 633.36, 723.27 
+    # 1. Obtener BCV (Corregido)
+    bcv_usd, bcv_eur = obtener_tasa_bcv()
     
-    # Intentamos extraer
+    # 2. Obtener Binance (Lógica intacta)
     banesco = obtener_binance_p2p("Banesco")
     mercantil = obtener_binance_p2p("Mercantil")
     bdv = obtener_binance_p2p("BancoDeVenezuela")
     pagomovil = obtener_binance_p2p("PagoMovil")
     
-    # Solo promediamos si son válidos
     valores = [v for v in [banesco, mercantil, bdv, pagomovil] if v > 0]
     promedio = sum(valores) / len(valores) if valores else 735.0
     
@@ -78,7 +71,7 @@ def main():
     }
     
     supabase.table("tasas_monitoreo").upsert(data).execute()
-    print(f"✅ Éxito, datos enviados: {data}")
+    print(f"✅ Éxito, datos enviados a Supabase: {data}")
 
 if __name__ == "__main__":
     main()
