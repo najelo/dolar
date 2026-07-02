@@ -1,44 +1,27 @@
-import os
 import requests
-from supabase import create_client
 
-def actualizar_tasas_bancos():
-    supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+def descubrir_metodos_pago():
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    
-    bancos_map = {
-        "binance_banesco": "Banesco",
-        "binance_mercantil": "Mercantil",
-        "binance_bdv": "Banco de Venezuela",
-        "binance_pagomovil": "Pago Movil",
-        "binance_provincial": "Provincial"
+    payload = {
+        "asset": "USDT",
+        "fiat": "VES",
+        "tradeType": "SELL",
+        "rows": 5, # Solo pedimos 5 filas para ver sus métodos de pago
+        "page": 1
     }
     
-    for columna, etiqueta in bancos_map.items():
-        payload = {
-            "asset": "USDT",
-            "fiat": "VES",
-            "tradeType": "SELL",
-            "rows": 1,
-            "page": 1,
-            "payTypes": [etiqueta]
-        }
-        
-        try:
-            response = requests.post(url, json=payload, timeout=10).json()
-            
-            if response.get("data") and len(response["data"]) > 0:
-                precio = float(response["data"][0]["adv"]["price"])
-                
-                # Actualización individual por columna
-                # Si esto falla, el 'try' atrapará el error y el bucle continuará
-                supabase.table("tasas_monitoreo").update({columna: precio}).eq("id", 1).execute()
-                print(f"✅ {etiqueta} actualizado: {precio}")
-            else:
-                print(f"⚠️ Sin datos para {etiqueta}")
-                    
-        except Exception as e:
-            print(f"❌ Error al actualizar {columna}: {e}")
+    try:
+        response = requests.post(url, json=payload, timeout=10).json()
+        if "data" in response and len(response["data"]) > 0:
+            # Extraemos los métodos de pago del primer anuncio encontrado
+            metodos = response["data"][0]["adv"]["tradeMethods"]
+            print("--- Métodos de pago encontrados ---")
+            for m in metodos:
+                print(f"Nombre interno: {m['tradeMethodName']}")
+        else:
+            print("No se encontraron anuncios, intenta en otro momento.")
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
-    actualizar_tasas_bancos()
+    descubrir_metodos_pago()
