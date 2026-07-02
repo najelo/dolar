@@ -42,15 +42,17 @@ def actualizar_binance():
                     payload_general = {"asset": "USDT", "fiat": "VES", "tradeType": operacion, "rows": 1}
                     resp = requests.post(url_binance, json=payload_general, timeout=10).json()
 
-                if resp.get('data'):
+            if resp.get('data'):
                     precio = float(resp['data'][0]['adv']['price'])
                     columna = f"binance_{nombre_bd}_{tipo}"
-                    
-                    # Actualizar Supabase
                     supabase.table("tasas_monitoreo").update({columna: precio}).eq("id", 1).execute()
                     print(f"✅ {nombre_bd.upper()} {tipo.upper()} actualizado a: {precio}")
                 else:
-                    print(f"⚠️ No hay anuncios activos para {nombre_bd} ({tipo.upper()})")
+                    # PLAN B: Si no hay nada, intentamos copiar el de Banesco o dejar un 0.0
+                    print(f"⚠️ No hay anuncios para {nombre_bd}. Asignando valor por defecto.")
+                    columna = f"binance_{nombre_bd}_{tipo}"
+                    # Guardamos un 0.0 o un valor de respaldo para que la app no falle
+                    supabase.table("tasas_monitoreo").update({columna: 0.0}).eq("id", 1).execute()
                 
             except Exception as e:
                 print(f"❌ Error con {nombre_bd} {tipo}: {e}")
