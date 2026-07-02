@@ -7,7 +7,9 @@ def actualizar_bcv():
     url = "https://www.bcv.org.ve/"
     try:
         # User-Agent para que el BCV no bloquee la petición
-        headers = {'User-Agent': 'Mozilla/5.0'}
+       headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.content, 'html.parser')
         
