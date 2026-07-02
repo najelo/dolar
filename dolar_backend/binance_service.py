@@ -2,47 +2,48 @@ import os
 import requests
 from supabase import create_client
 
-def actualizar_binance():
-    # Inicializar cliente
+def actualizar_tasas_bancos():
     supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-    
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     
-    # Lista de bancos según tus columnas principales
-    bancos = ["banesco", "mercantil", "provincial", "pagomovil", "bdv"]
-    
-    # Usamos tradeType "SELL" (es el precio de venta de USDT, el más usado como referencia)
-    payload = {
-        "asset": "USDT",
-        "fiat": "VES",
-        "tradeType": "SELL",
-        "rows": 1,
-        "page": 1
+    # Mapeo: nombre de la columna en tu BD -> etiqueta real en Binance
+    bancos_map = {
+        "binance_banesco": "Banesco",
+        "binance_mercantil": "Mercantil",
+        "binance_bdv": "Banco de Venezuela",
+        "binance_pagomovil": "Pago Móvil",
+        "binance_provincial": "Provincial"
     }
     
-    try:
-        response = requests.post(url, json=payload, timeout=10).json()
+    updates = {}
+    
+    for columna, etiqueta in bancos_map.items():
+        payload = {
+            "asset": "USDT",
+            "fiat": "VES",
+            "tradeType": "SELL",  # Buscamos precio de venta
+            "rows": 1,
+            "page": 1,
+            "payTypes": [etiqueta] # Filtramos específicamente por el banco
+        }
         
-        if response.get("data") and len(response["data"]) > 0:
-            precio = float(response["data"][0]["adv"]["price"])
+        try:
+            response = requests.post(url, json=payload, timeout=10).json()
             
-            # Preparamos el diccionario para actualizar las columnas simples (ej: binance_banesco)
-            updates = {}
-            for banco in bancos:
-                # Ajustamos al nombre de columna que tienes en tu esquema (ej: binance_banesco)
-                columna = f"binance_{banco}"
+            if response.get("data") and len(response["data"]) > 0:
+                precio = float(response["data"][0]["adv"]["price"])
                 updates[columna] = precio
-            
-            # Actualizamos también la columna general 'binance' si existe
-            updates["binance"] = precio
-            
-            supabase.table("tasas_monitoreo").update(updates).eq("id", 1).execute()
-            print(f"✅ Precios actualizados para todos los bancos: {precio}")
-        else:
-            print("⚠️ Sin datos de mercado para actualizar")
+                print(f"✅ {etiqueta} (Venta): {precio}")
+            else:
+                print(f"⚠️ Sin datos para {etiqueta}")
                     
-    except Exception as e:
-        print(f"❌ Error al actualizar Binance: {e}")
+        except Exception as e:
+            print(f"❌ Error obteniendo {etiqueta}: {e}")
+    
+    # Actualizar todo en un solo movimiento
+    if updates:
+        supabase.table("tasas_monitoreo").update(updates).eq("id", 1).execute()
+        print("🚀 Base de datos actualizada con los precios de venta bancarios.")
 
 if __name__ == "__main__":
-    actualizar_binance()
+    actualizar_tasas_bancos()
