@@ -27,35 +27,31 @@ def actualizar_binance():
         for tipo in ["buy", "sell"]:
             operacion = "BUY" if tipo == "buy" else "SELL"
             
-            # Intento 1: Con filtro de banco
-            payload = {
-                "asset": "USDT", "fiat": "VES", "tradeType": operacion, 
-                "payTypes": [codigo_api], "rows": 1, "page": 1
-            }
-            
+            # Bloque try-except debe envolver la lógica de red por cada iteración
             try:
+                # Intento 1: Con filtro de banco
+                payload = {
+                    "asset": "USDT", "fiat": "VES", "tradeType": operacion, 
+                    "payTypes": [codigo_api], "rows": 1, "page": 1
+                }
                 resp = requests.post(url_binance, json=payload, timeout=10).json()
                 
                 # Intento 2: Si falla el filtro, intentar búsqueda general
                 if not resp.get('data'):
-                    print(f"⚠️ Filtro falló para {nombre_bd}, buscando general...")
                     payload_general = {"asset": "USDT", "fiat": "VES", "tradeType": operacion, "rows": 1}
                     resp = requests.post(url_binance, json=payload_general, timeout=10).json()
 
-            if resp.get('data'):
+                if resp.get('data'):
                     precio = float(resp['data'][0]['adv']['price'])
                     columna = f"binance_{nombre_bd}_{tipo}"
                     supabase.table("tasas_monitoreo").update({columna: precio}).eq("id", 1).execute()
                     print(f"✅ {nombre_bd.upper()} {tipo.upper()} actualizado a: {precio}")
                 else:
-                    # PLAN B: Si no hay nada, intentamos copiar el de Banesco o dejar un 0.0
-                    print(f"⚠️ No hay anuncios para {nombre_bd}. Asignando valor por defecto.")
-                    columna = f"binance_{nombre_bd}_{tipo}"
-                    # Guardamos un 0.0 o un valor de respaldo para que la app no falle
-                    supabase.table("tasas_monitoreo").update({columna: 0.0}).eq("id", 1).execute()
+                    print(f"⚠️ No hay anuncios para {nombre_bd} ({tipo.upper()}). Guardando 0.0")
+                    supabase.table("tasas_monitoreo").update({f"binance_{nombre_bd}_{tipo}": 0.0}).eq("id", 1).execute()
                 
             except Exception as e:
-                print(f"❌ Error con {nombre_bd} {tipo}: {e}")
+                print(f"❌ Error procesando {nombre_bd} {tipo}: {e}")
 
 if __name__ == "__main__":
     actualizar_binance()
