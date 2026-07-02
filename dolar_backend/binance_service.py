@@ -4,22 +4,30 @@ from supabase import create_client
 
 def obtener_tasa_flexible(palabra_clave):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    # Aumentamos a 50 anuncios para asegurar que siempre encontremos algo
     payload = {
         "asset": "USDT",
         "fiat": "VES",
         "tradeType": "SELL",
-        "rows": 20,
+        "rows": 50, 
         "page": 1
     }
+    
     try:
-        response = requests.post(url, json=payload, timeout=10).json()
+        response = requests.post(url, json=payload, timeout=15).json()
         if "data" in response:
             for anuncio in response["data"]:
+                # 1. Buscamos en el nombre del método (como antes)
                 for m in anuncio["adv"]["tradeMethods"]:
                     if palabra_clave.lower() in m["tradeMethodName"].lower():
                         return float(anuncio["adv"]["price"])
-    except Exception:
-        pass
+                
+                # 2. NUEVO: Buscamos en el título del anuncio (a veces ponen "PAGO MOVIL" aquí)
+                if palabra_clave.lower() in anuncio["adv"]["advTitle"].lower():
+                    return float(anuncio["adv"]["price"])
+                    
+    except Exception as e:
+        print(f"Error al conectar: {e}")
     return None
 
 def actualizar_todo():
