@@ -1,9 +1,9 @@
 import os
 import requests
+import time
 from bs4 import BeautifulSoup  
 from datetime import datetime
 from supabase import create_client
-import time
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
@@ -15,7 +15,6 @@ def obtener_tasa_bcv():
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
             }
-            # Timeout generoso de 25 segundos
             response = requests.get("https://www.bcv.org.ve/", headers=headers, timeout=25, verify=False)
             soup = BeautifulSoup(response.content, 'html.parser')
             
@@ -28,17 +27,16 @@ def obtener_tasa_bcv():
                 return dolar, euro, True
             
             print(f"⚠️ Intento {i+1} fallido: Contenido no encontrado.")
-            
         except Exception as e:
             print(f"⚠️ Intento {i+1} fallido: {e}")
         
-        # Esperamos 10 segundos antes de volver a intentar
         if i < intentos - 1:
-            time.sleep(10)
+            time.sleep(10) # Espera 10 segundos antes de reintentar
             
     return None, None, False
 
 def obtener_binance_p2p(banco_nombre):
+    # Tu lógica de Binance se mantiene intacta
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
     payload = {
@@ -64,34 +62,32 @@ def main():
     valores = [v for v in [banesco, mercantil, bdv, pagomovil] if v > 0]
     promedio = sum(valores) / len(valores) if valores else 735.0
     
-    # 2. Protección: Solo actualizar si hay éxito y valor coherente
+    # 2. Actualización a Supabase
+    # Si el BCV falla (exito_bcv=False), solo actualizamos Binance para no perder esa info
     if exito_bcv and bcv_usd > 600:
-        # Consultar valor actual en Supabase para comparar
-        try:
-            registro = supabase.table("tasas_monitoreo").select("bcv_dolar").eq("id", 1).single().execute()
-            valor_db = registro.data.get("bcv_dolar")
-        except:
-            valor_db = 0
-
-        # Solo hacer upsert si la tasa BCV es diferente a la guardada
-        if bcv_usd != valor_db:
-            data = {
-                "id": 1,
-                "bcv_dolar": bcv_usd,
-                "bcv_euro": bcv_eur,
-                "binance": round(promedio, 2),
-                "binance_banesco": banesco if banesco > 0 else 735.0,
-                "binance_mercantil": mercantil if mercantil > 0 else 735.0,
-                "binance_bdv": bdv if bdv > 0 else 735.0,
-                "binance_pagomovil": pagomovil if pagomovil > 0 else 735.0,
-                "ultima_actualizacion": datetime.now().isoformat()
-            }
-            supabase.table("tasas_monitoreo").upsert(data).execute()
-            print(f"✅ Cambio detectado: Base de datos actualizada a {bcv_usd}")
-        else:
-            print("ℹ️ Tasa BCV sin cambios. No es necesario actualizar.")
+        data = {
+            "bcv_dolar": bcv_usd,
+            "bcv_euro": bcv_eur,
+            "binance": round(promedio, 2),
+            "binance_banesco": banesco if banesco > 0 else 735.0,
+            "binance_mercantil": mercantil if mercantil > 0 else 735.0,
+            "binance_bdv": bdv if bdv > 0 else 735.0,
+            "binance_pagomovil": pagomovil if pagomovil > 0 else 735.0,
+            "ultima_actualizacion": datetime.now().isoformat()
+        }
+        supabase.table("tasas_monitoreo").update(data).eq("id", 1).execute()
+        print(f"✅ Éxito: Base de datos actualizada con BCV {bcv_usd}")
     else:
-        print(f"⚠️ BCV falló o valor ilógico ({bcv_usd}). No se hizo nada.")
+        # Si BCV falla, solo actualizamos Binance
+        data_binance = {
+            "binance": round(promedio, 2),
+            "binance_banesco": banesco if banesco > 0 else 735.0,
+            "binance_mercantil": mercantil if mercantil > 0 else 735.0,
+            "binance_bdv": bdv if bdv > 0 else 735.0,
+            "binance_pagomovil": pagomovil if pagomovil > 0 else 735.0
+        }
+        supabase.table("tasas_monitoreo").update(data_binance).eq("id", 1).execute()
+        print("ℹ️ BCV no disponible. Solo se actualizaron tasas de Binance.")
 
 if __name__ == "__main__":
     main()
