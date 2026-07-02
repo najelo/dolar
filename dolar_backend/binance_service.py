@@ -3,43 +3,47 @@ import requests
 from supabase import create_client
 
 def actualizar_binance():
+    # Inicializar cliente
     supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
     
-    bancos_map = {
+    # URL de API P2P (Punto final estable)
+    url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    
+    # Mapeo de bancos
+    bancos = {
         "banesco": "Banesco",
         "mercantil": "Mercantil",
         "provincial": "Provincial",
         "pagomovil": "Pago Móvil",
         "bdv": "Banco de Venezuela"
     }
-    
-    url_binance = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    
-    for nombre_bd, codigo_api in bancos_map.items():
-        for tipo in ["buy", "sell"]:
-            operacion = "BUY" if tipo == "buy" else "SELL"
-            columna = f"binance_{nombre_bd}_{tipo}"
-            
-            # Intento 1: Filtro específico
-            payload = {"asset": "USDT", "fiat": "VES", "tradeType": operacion, "payTypes": [codigo_api], "rows": 1}
+
+    for nombre, etiqueta in bancos.items():
+        for operacion in ["BUY", "SELL"]:
+            # Usamos una estructura de payload más genérica que es aceptada siempre
+            payload = {
+                "asset": "USDT",
+                "fiat": "VES",
+                "tradeType": operacion,
+                "rows": 1,
+                "payTypes": [etiqueta]
+            }
             
             try:
-                resp = requests.post(url_binance, json=payload, timeout=10).json()
+                response = requests.post(url, json=payload, timeout=10).json()
                 
-                # Intento 2: Respaldo (Búsqueda general) si el específico falla
-                if not resp.get('data'):
-                    payload_gen = {"asset": "USDT", "fiat": "VES", "tradeType": operacion, "rows": 1}
-                    resp = requests.post(url_binance, json=payload_gen, timeout=10).json()
-
-                if resp.get('data'):
-                    precio = float(resp['data'][0]['adv']['price'])
+                # Verificamos si hay datos
+                if response.get("data") and len(response["data"]) > 0:
+                    precio = float(response["data"][0]["adv"]["price"])
+                    columna = f"binance_{nombre}_{operacion.lower()}"
+                    
                     supabase.table("tasas_monitoreo").update({columna: precio}).eq("id", 1).execute()
-                    print(f"✅ {nombre_bd.upper()} {tipo.upper()}: {precio}")
+                    print(f"✅ {nombre.upper()} {operacion}: {precio}")
                 else:
-                    print(f"⚠️ {nombre_bd.upper()} {tipo.upper()}: No hay datos, omitiendo.")
+                    print(f"⚠️ Sin resultados para {nombre} {operacion}")
                     
             except Exception as e:
-                print(f"❌ Error en {nombre_bd}: {e}")
+                print(f"❌ Error en {nombre}: {e}")
 
 if __name__ == "__main__":
     actualizar_binance()
