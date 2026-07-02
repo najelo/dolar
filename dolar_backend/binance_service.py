@@ -11,7 +11,7 @@ def actualizar_tasas_bancos():
         "binance_banesco": "Banesco",
         "binance_mercantil": "Mercantil",
         "binance_bdv": "Banco de Venezuela",
-        "binance_pagomovil": "Pago Móvil",
+        "binance_pagomovil": "Pago Movil", # Sin acento
         "binance_provincial": "Provincial"
     }
     
