@@ -10,22 +10,21 @@ on:
   workflow_dispatch: # Te permite ejecutarlo manualmente desde la pestaña Actions
 
 jobs:
-  update-bcv:
+  actualizar-tasas:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout del repositorio
-        uses: actions/checkout@v3
-
-      - name: Configurar Python
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-
-      - name: Instalar dependencias
-        run: |
-          pip install requests supabase
           
-      - name: Ejecutar script BCV
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 supabase
+          
+      - name: Run script
         run: python dolar_backend/bcv_service.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
