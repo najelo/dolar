@@ -6,26 +6,19 @@ from supabase import create_client
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-def obtener_tasa_bcv():
-    """Scraping directo al BCV con una estrategia de reintento"""
-    url = "https://www.bcv.org.ve/"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    }
+def obtener_tasas_bcv_estrictas():
+    """Obtiene Dólar y Euro. Falla si alguno falta."""
+    url = "https://ve.dolarapi.com/v1/dolares"
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
     
-    # Intentamos 3 veces si falla
-    for i in range(3):
-        try:
-            response = requests.get(url, headers=headers, timeout=25, verify=False)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'lxml') # Usamos lxml
-                dolar = float(soup.select_one('#dolar strong').text.strip().replace('.', '').replace(',', '.'))
-                euro = float(soup.select_one('#euro strong').text.strip().replace('.', '').replace(',', '.'))
-                return dolar, euro
-        except Exception as e:
-            print(f"Intento {i+1} fallido: {e}")
-            continue
-    return None, None
+    data = response.json()
+    
+    # Buscamos en el JSON el oficial del BCV para dólar y euro
+    dolar_bcv = next(item for item in data if item['codigo'] == 'bcv')
+    euro_bcv = next(item for item in data if item['codigo'] == 'bcv-euro')
+    
+    return float(dolar_bcv['promedio']), float(euro_bcv['promedio'])
 
 def obtener_binance_p2p(banco_nombre):
     # Esta parte se queda EXACTAMENTE igual como me pediste
