@@ -8,11 +8,11 @@ def actualizar_binance():
     
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     
-    # Lista de bancos según tu tabla
+    # Lista de bancos tal cual los tienes en tus columnas
     bancos = ["banesco", "mercantil", "provincial", "pagomovil", "bdv"]
     
     for operacion in ["BUY", "SELL"]:
-        # Payload sin filtros específicos de banco para evitar bloqueos
+        # Consulta de mercado general (evita bloqueos)
         payload = {
             "asset": "USDT",
             "fiat": "VES",
@@ -27,15 +27,16 @@ def actualizar_binance():
             if response.get("data") and len(response["data"]) > 0:
                 precio = float(response["data"][0]["adv"]["price"])
                 
-                # Preparamos el diccionario de actualización para todas las columnas de una vez
+                # Preparamos el diccionario de actualización 
+                # Los nombres de las llaves deben coincidir con tus columnas:
+                # binance_banesco_buy, binance_banesco_sell, etc.
                 updates = {}
                 for banco in bancos:
                     columna = f"binance_{banco}_{operacion.lower()}"
                     updates[columna] = precio
                 
-                # Una sola petición a la base de datos
                 supabase.table("tasas_monitoreo").update(updates).eq("id", 1).execute()
-                print(f"✅ Precio {operacion} general capturado y distribuido: {precio}")
+                print(f"✅ Precios {operacion} actualizados para todos los bancos: {precio}")
             else:
                 print(f"⚠️ Sin datos de mercado para {operacion}")
                     
