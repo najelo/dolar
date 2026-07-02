@@ -3,29 +3,40 @@ import requests
 from bs4 import BeautifulSoup  
 from datetime import datetime
 from supabase import create_client
+import time
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_tasa_bcv():
-    """Extrae el valor real directamente del HTML del BCV"""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-        }
-        session = requests.Session()
-        response = session.get("https://www.bcv.org.ve/", headers=headers, timeout=20, verify=False)
-        soup = BeautifulSoup(response.content, 'html.parser')
+    """Extrae con reintentos para dar tiempo al servidor del BCV."""
+    intentos = 3
+    for i in range(intentos):
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+            }
+            # Timeout generoso de 25 segundos
+            response = requests.get("https://www.bcv.org.ve/", headers=headers, timeout=25, verify=False)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            dolar_tag = soup.select_one('#dolar strong')
+            euro_tag = soup.select_one('#euro strong')
+            
+            if dolar_tag and euro_tag:
+                dolar = float(dolar_tag.text.strip().replace('.', '').replace(',', '.'))
+                euro = float(euro_tag.text.strip().replace('.', '').replace(',', '.'))
+                return dolar, euro, True
+            
+            print(f"⚠️ Intento {i+1} fallido: Contenido no encontrado.")
+            
+        except Exception as e:
+            print(f"⚠️ Intento {i+1} fallido: {e}")
         
-        dolar_text = soup.select_one('#dolar strong').text.strip()
-        dolar = float(dolar_text.replace('.', '').replace(',', '.'))
-        
-        euro_text = soup.select_one('#euro strong').text.strip()
-        euro = float(euro_text.replace('.', '').replace(',', '.'))
-        
-        return dolar, euro, True
-    except Exception as e:
-        print(f"❌ ERROR EN SCRAPING: {e}")
-        return 0, 0, False
+        # Esperamos 10 segundos antes de volver a intentar
+        if i < intentos - 1:
+            time.sleep(10)
+            
+    return None, None, False
 
 def obtener_binance_p2p(banco_nombre):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
