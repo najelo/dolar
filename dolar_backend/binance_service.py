@@ -3,16 +3,9 @@ import requests
 from supabase import create_client
 
 def actualizar_binance():
-    # Inicialización de Supabase
-    url_supabase = os.getenv("SUPABASE_URL")
-    key_supabase = os.getenv("SUPABASE_KEY")
-    if not url_supabase or not key_supabase:
-        print("❌ Error: Faltan credenciales de Supabase")
-        return
-        
-    supabase = create_client(url_supabase, key_supabase)
+    supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
     
-    # Mapeo de bancos
+    # Mapeo exacto basado en la interfaz de Binance que enviaste
     bancos_map = {
         "banesco": "Banesco",
         "mercantil": "Mercantil",
@@ -26,32 +19,26 @@ def actualizar_binance():
     for nombre_bd, codigo_api in bancos_map.items():
         for tipo in ["buy", "sell"]:
             operacion = "BUY" if tipo == "buy" else "SELL"
+            payload = {
+                "asset": "USDT", "fiat": "VES", "tradeType": operacion, 
+                "payTypes": [codigo_api], "rows": 1
+            }
             
-            # Bloque try-except debe envolver la lógica de red por cada iteración
             try:
-                # Intento 1: Con filtro de banco
-                payload = {
-                    "asset": "USDT", "fiat": "VES", "tradeType": operacion, 
-                    "payTypes": [codigo_api], "rows": 1, "page": 1
-                }
                 resp = requests.post(url_binance, json=payload, timeout=10).json()
                 
-                # Intento 2: Si falla el filtro, intentar búsqueda general
-                if not resp.get('data'):
-                    payload_general = {"asset": "USDT", "fiat": "VES", "tradeType": operacion, "rows": 1}
-                    resp = requests.post(url_binance, json=payload_general, timeout=10).json()
-
-                if resp.get('data'):
+                if resp.get('data') and len(resp['data']) > 0:
                     precio = float(resp['data'][0]['adv']['price'])
                     columna = f"binance_{nombre_bd}_{tipo}"
+                    
+                    # Actualizamos la columna específica
                     supabase.table("tasas_monitoreo").update({columna: precio}).eq("id", 1).execute()
-                    print(f"✅ {nombre_bd.upper()} {tipo.upper()} actualizado a: {precio}")
+                    print(f"✅ {nombre_bd.upper()} {tipo.upper()}: {precio}")
                 else:
-                    print(f"⚠️ No hay anuncios para {nombre_bd} ({tipo.upper()}). Guardando 0.0")
-                    supabase.table("tasas_monitoreo").update({f"binance_{nombre_bd}_{tipo}": 0.0}).eq("id", 1).execute()
-                
+                    print(f"⚠️ No hay anuncios para {nombre_bd} ({tipo.upper()})")
+                    
             except Exception as e:
-                print(f"❌ Error procesando {nombre_bd} {tipo}: {e}")
+                print(f"❌ Error en {nombre_bd} {tipo}: {e}")
 
 if __name__ == "__main__":
     actualizar_binance()
