@@ -6,12 +6,12 @@ def actualizar_binance():
     supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
     
     # Mapeo: nombre_interno_en_tabla : código_que_espera_la_API_de_Binance
-    bancos_map = {
+  bancos_map = {
         "banesco": "Banesco",
         "mercantil": "Mercantil",
         "provincial": "Provincial",
-        "pagomovil": "Pago Movil", 
-        "bdv": "BDV"
+        "pagomovil": "Pago Móvil", # Probemos con el acento en la ó
+        "bdv": "Banco de Venezuela"
     }
     
     url_binance = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
