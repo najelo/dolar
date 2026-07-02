@@ -27,7 +27,7 @@ def actualizar_bcv():
             
             # Guardar en Supabase
             supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-            supabase.table("tasas_monitoreo").update({"bcv": tasa_bcv}).eq("id", 1).execute()
+            supabase.table("tasas_monitoreo").update({"bcv_dolar": tasa_bcv}).eq("id", 1).execute()
             print(f"✅ Tasa BCV actualizada: {tasa_bcv}")
         else:
             print("❌ No se encontró el div 'dolar' en la página del BCV")
