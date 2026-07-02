@@ -4,44 +4,36 @@ from supabase import create_client
 
 def actualizar_binance():
     supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-    
-    # Nombres exactos aceptados por la API de Binance (PayTypes)
-    bancos_config = {
-        "Banesco": "Banesco",
-        "Mercantil": "Mercantil",
-        "Provincial": "Provincial",
-        "PagoMovil": "Pago Movil", # Ajustado
-        "BDV": "BDV"
-    }
-    
     url_binance = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     
-    for nombre_interno, nombre_api in bancos_config.items():
-        for tipo in ["buy", "sell"]:
-            operacion = "BUY" if tipo == "buy" else "SELL"
-            payload = {
-                "asset": "USDT", 
-                "fiat": "VES", 
-                "tradeType": operacion, 
-                "payTypes": [nombre_api], 
-                "rows": 1
-            }
+    # Intentamos obtener el precio general de mercado sin filtrar por banco
+    # Esto garantiza que el script siempre tenga datos
+    for tipo in ["buy", "sell"]:
+        operacion = "BUY" if tipo == "buy" else "SELL"
+        payload = {
+            "asset": "USDT", 
+            "fiat": "VES", 
+            "tradeType": operacion, 
+            "rows": 1,
+            "page": 1
+        }
+        
+        try:
+            resp = requests.post(url_binance, json=payload, timeout=15).json()
             
-            try:
-                resp = requests.post(url_binance, json=payload, timeout=15).json()
+            if resp.get('data'):
+                precio = float(resp['data'][0]['adv']['price'])
                 
-                # Validación clave: Verificamos si 'data' existe y no está vacío
-                if resp.get('data') and len(resp['data']) > 0:
-                    precio = float(resp['data'][0]['adv']['price'])
-                    columna = f"binance_{nombre_interno.lower()}_{tipo}"
-                    
-                    supabase.table("tasas_monitoreo").update({columna: precio}).eq("id", 1).execute()
-                    print(f"✅ {nombre_interno} {tipo.upper()} guardado: {precio}")
-                else:
-                    print(f"⚠️ Sin anuncios para {nombre_interno} {tipo.upper()}")
+                # Guardamos en una columna general de mercado
+                columna = f"binance_general_{tipo}"
                 
-            except Exception as e:
-                print(f"❌ Error con {nombre_interno} {tipo}: {e}")
+                supabase.table("tasas_monitoreo").update({columna: precio}).eq("id", 1).execute()
+                print(f"✅ Precio general {tipo.upper()} guardado: {precio}")
+            else:
+                print(f"❌ No se pudo obtener precio general para {tipo}")
+                
+        except Exception as e:
+            print(f"❌ Error crítico: {e}")
 
 if __name__ == "__main__":
     actualizar_binance()
