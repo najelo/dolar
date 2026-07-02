@@ -7,9 +7,8 @@ from supabase import create_client
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_tasa_bcv():
-    """Extrae el valor real usando un selector más preciso"""
+    """Extrae el valor real directamente del HTML del BCV"""
     try:
-        # Aumentamos el timeout y usamos un header muy básico para parecer un usuario real
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
         }
@@ -18,8 +17,7 @@ def obtener_tasa_bcv():
         response = session.get("https://www.bcv.org.ve/", headers=headers, timeout=20, verify=False)
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # En el BCV, el recuadro del dólar suele estar dentro de un div con id 'dolar'
-        # Buscamos el texto dentro del strong. Si falla, el except nos avisará.
+        # Extracción de valores
         dolar_text = soup.select_one('#dolar strong').text.strip()
         dolar = float(dolar_text.replace('.', '').replace(',', '.'))
         
@@ -30,7 +28,6 @@ def obtener_tasa_bcv():
         return dolar, euro, True
     except Exception as e:
         print(f"❌ ERROR EN SCRAPING: {e}")
-        # Si falla, devolvemos 0 para que el main NO actualice la base de datos
         return 0, 0, False
 
 def obtener_binance_p2p(banco_nombre):
@@ -62,10 +59,8 @@ def main():
     valores = [v for v in [banesco, mercantil, bdv, pagomovil] if v > 0]
     promedio = sum(valores) / len(valores) if valores else 735.0
     
-    # 3. Lógica de Protección:
-    # Solo actualizamos el BCV si la API respondió correctamente (exito_bcv == True)
-    # Si falló, usamos los valores actuales de la base de datos para no sobrescribir con error
-    if exito_bcv:
+    # 3. Lógica de Protección (Filtro > 600 para evitar datos basura)
+    if exito_bcv and bcv_usd > 600:
         data = {
             "id": 1,
             "bcv_dolar": bcv_usd,
@@ -80,7 +75,7 @@ def main():
         supabase.table("tasas_monitoreo").upsert(data).execute()
         print(f"✅ Éxito, datos enviados a Supabase: {data}")
     else:
-        print("⚠️ La API de BCV falló. No se actualizará la base de datos para no corromper los datos actuales.")
+        print(f"⚠️ BCV falló o retornó un valor ilógico ({bcv_usd}). No se actualizará la base de datos.")
 
 if __name__ == "__main__":
     main()
