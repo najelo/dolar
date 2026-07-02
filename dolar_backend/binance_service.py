@@ -2,38 +2,37 @@ import os
 import requests
 from supabase import create_client
 
-def obtener_tasa_flexible(palabra_clave):
+def obtener_tasa_segura(palabra_clave):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    # Aumentamos a 50 anuncios para asegurar que siempre encontremos algo
-    payload = {
-        "asset": "USDT",
-        "fiat": "VES",
-        "tradeType": "SELL",
-        "rows": 50, 
-        "page": 1
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
+    payload = {"asset": "USDT", "fiat": "VES", "tradeType": "SELL", "rows": 50, "page": 1}
     
     try:
-        response = requests.post(url, json=payload, timeout=15).json()
-        if "data" in response:
+        response = requests.post(url, json=payload, headers=headers, timeout=15).json()
+        
+        # Validación estricta de la estructura de la respuesta
+        if response and "data" in response and isinstance(response["data"], list):
+            # 1. Intentar buscar por palabra clave
             for anuncio in response["data"]:
-                # 1. Buscamos en el nombre del método (como antes)
-                for m in anuncio["adv"]["tradeMethods"]:
-                    if palabra_clave.lower() in m["tradeMethodName"].lower():
+                # Revisar tradeMethods
+                for m in anuncio.get("adv", {}).get("tradeMethods", []):
+                    if palabra_clave.lower() in m.get("tradeMethodName", "").lower():
                         return float(anuncio["adv"]["price"])
-                
-                # 2. NUEVO: Buscamos en el título del anuncio (a veces ponen "PAGO MOVIL" aquí)
-                if palabra_clave.lower() in anuncio["adv"]["advTitle"].lower():
+                # Revisar título
+                if palabra_clave.lower() in anuncio.get("adv", {}).get("advTitle", "").lower():
                     return float(anuncio["adv"]["price"])
-                    
+            
+            # 2. Si no encuentra por palabra, devolver el primer precio disponible (Respaldo)
+            return float(response["data"][0]["adv"]["price"])
+            
     except Exception as e:
-        print(f"Error al conectar: {e}")
+        print(f"Error técnico: {e}")
     return None
 
 def actualizar_todo():
     supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-    
-    # Lista de bancos a monitorear (sin provincial)
     busquedas = {
         "binance_bdv": "Venezuela",
         "binance_pagomovil": "Movil",
@@ -42,15 +41,15 @@ def actualizar_todo():
     }
     
     for col, clave in busquedas.items():
-        precio = obtener_tasa_flexible(clave)
+        precio = obtener_tasa_segura(clave)
         if precio:
             try:
                 supabase.table("tasas_monitoreo").update({col: precio}).eq("id", 1).execute()
                 print(f"✅ {col} actualizado a: {precio}")
             except Exception as e:
-                print(f"⚠️ Error al guardar en {col}: {e}")
+                print(f"⚠️ Error al guardar {col}: {e}")
         else:
-            print(f"⚠️ No se encontró tasa específica para {col}")
+            print(f"⚠️ No se pudo obtener precio para {col}")
 
 if __name__ == "__main__":
     actualizar_todo()
