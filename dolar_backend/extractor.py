@@ -7,24 +7,31 @@ from supabase import create_client
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_tasa_bcv():
-    """Extrae el valor real directamente del HTML del BCV"""
+    """Extrae el valor real usando un selector más preciso"""
     try:
+        # Aumentamos el timeout y usamos un header muy básico para parecer un usuario real
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
         }
-        response = requests.get("https://www.bcv.org.ve/", headers=headers, timeout=15, verify=False)
-        soup = BeautifulSoup(response.content, 'lxml')
+        # Intentamos obtener la web con una sesión
+        session = requests.Session()
+        response = session.get("https://www.bcv.org.ve/", headers=headers, timeout=20, verify=False)
+        soup = BeautifulSoup(response.content, 'html.parser')
         
-        dolar_text = soup.find("div", {"id": "dolar"}).find("strong").text
+        # En el BCV, el recuadro del dólar suele estar dentro de un div con id 'dolar'
+        # Buscamos el texto dentro del strong. Si falla, el except nos avisará.
+        dolar_text = soup.select_one('#dolar strong').text.strip()
         dolar = float(dolar_text.replace('.', '').replace(',', '.'))
         
-        euro_text = soup.find("div", {"id": "euro"}).find("strong").text
+        euro_text = soup.select_one('#euro strong').text.strip()
         euro = float(euro_text.replace('.', '').replace(',', '.'))
         
-        return dolar, euro, True # Retornamos los 3 valores correctamente
+        print(f"✅ Extracción exitosa: USD {dolar} | EUR {euro}")
+        return dolar, euro, True
     except Exception as e:
-        print(f"Error extrayendo BCV directo: {e}")
-        return 0, 0, False # Fallo
+        print(f"❌ ERROR EN SCRAPING: {e}")
+        # Si falla, devolvemos 0 para que el main NO actualice la base de datos
+        return 0, 0, False
 
 def obtener_binance_p2p(banco_nombre):
     # Lógica de Binance intacta
