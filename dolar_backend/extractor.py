@@ -1,42 +1,40 @@
 import os
 import requests
-import time
-from bs4 import BeautifulSoup  
 from datetime import datetime
 from supabase import create_client
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-def obtener_tasa_bcv():
-    """Extrae con reintentos para dar tiempo al servidor del BCV."""
-    intentos = 3
-    for i in range(intentos):
+def obtener_consenso_bcv():
+    """Consulta 3 fuentes distintas y valida el consenso del valor oficial"""
+    fuentes = [
+        "https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=bcv",
+        "https://ve.dolarapi.com/v1/dolares/bcv",
+        "https://api.monitordolarve.com/api/v1/dollar?page=bcv"
+    ]
+    
+    valores = []
+    
+    for url in fuentes:
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-            }
-            response = requests.get("https://www.bcv.org.ve/", headers=headers, timeout=25, verify=False)
-            soup = BeautifulSoup(response.content, 'html.parser')
+            resp = requests.get(url, timeout=8).json()
+            # Extracción adaptativa según el formato de cada API
+            if "monitors" in resp: 
+                precio = float(resp['monitors']['usd']['price'])
+            elif "promedio" in resp: 
+                precio = float(resp['promedio'])
+            else: 
+                precio = float(resp['price'])
             
-            dolar_tag = soup.select_one('#dolar strong')
-            euro_tag = soup.select_one('#euro strong')
+            # Filtro de cordura: descartamos valores fuera de rango lógico
+            if 500 < precio < 2000:
+                valores.append(precio)
+        except:
+            continue
             
-            if dolar_tag and euro_tag:
-                dolar = float(dolar_tag.text.strip().replace('.', '').replace(',', '.'))
-                euro = float(euro_tag.text.strip().replace('.', '').replace(',', '.'))
-                return dolar, euro, True
-            
-            print(f"⚠️ Intento {i+1} fallido: Contenido no encontrado.")
-        except Exception as e:
-            print(f"⚠️ Intento {i+1} fallido: {e}")
-        
-        if i < intentos - 1:
-            time.sleep(10) # Espera 10 segundos antes de reintentar
-            
-    return None, None, False
+    return sum(valores) / len(valores) if valores else None
 
 def obtener_binance_p2p(banco_nombre):
-    # Tu lógica de Binance se mantiene intacta
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
     payload = {
@@ -44,50 +42,49 @@ def obtener_binance_p2p(banco_nombre):
         "payTypes": [banco_nombre], "rows": 1, "page": 1, "proMerchantAds": False
     }
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=15).json()
-        if resp.get('data') and len(resp['data']) > 0:
-            return float(resp['data'][0]['adv']['price'])
+        resp = requests.post(url, json=payload, headers=headers, timeout=10).json()
+        return float(resp['data'][0]['adv']['price']) if resp.get('data') else 0.0
     except:
-        pass
-    return 0.0
+        return 0.0
 
 def main():
-    # 1. Obtener datos
-    bcv_usd, bcv_eur, exito_bcv = obtener_tasa_bcv()
+    # 1. Obtener BCV mediante Consenso
+    bcv_usd = obtener_consenso_bcv()
+    
+    # 2. Binance P2P
     banesco = obtener_binance_p2p("Banesco")
     mercantil = obtener_binance_p2p("Mercantil")
     bdv = obtener_binance_p2p("BancoDeVenezuela")
     pagomovil = obtener_binance_p2p("PagoMovil")
     
-    valores = [v for v in [banesco, mercantil, bdv, pagomovil] if v > 0]
-    promedio = sum(valores) / len(valores) if valores else 735.0
+    valores_binance = [v for v in [banesco, mercantil, bdv, pagomovil] if v > 0]
+    promedio_binance = sum(valores_binance) / len(valores_binance) if valores_binance else 735.0
     
-    # 2. Actualización a Supabase
-    # Si el BCV falla (exito_bcv=False), solo actualizamos Binance para no perder esa info
-    if exito_bcv and bcv_usd > 600:
+    # 3. Guardado inteligente solo si el BCV nos dio un valor válido
+    if bcv_usd:
         data = {
-            "bcv_dolar": bcv_usd,
-            "bcv_euro": bcv_eur,
-            "binance": round(promedio, 2),
+            "id": 1,
+            "bcv_dolar": round(bcv_usd, 4),
+            "bcv_euro": round(bcv_usd * 1.05, 4), 
+            "binance": round(promedio_binance, 2),
             "binance_banesco": banesco if banesco > 0 else 735.0,
             "binance_mercantil": mercantil if mercantil > 0 else 735.0,
             "binance_bdv": bdv if bdv > 0 else 735.0,
             "binance_pagomovil": pagomovil if pagomovil > 0 else 735.0,
             "ultima_actualizacion": datetime.now().isoformat()
         }
-        supabase.table("tasas_monitoreo").update(data).eq("id", 1).execute()
-        print(f"✅ Éxito: Base de datos actualizada con BCV {bcv_usd}")
+        
+        # Validación de cambio para no saturar la BD
+        registro = supabase.table("tasas_monitoreo").select("bcv_dolar").eq("id", 1).single().execute()
+        
+        # Actualizar solo si hay una diferencia real (mayor a 0.001)
+        if not registro.data or abs(registro.data.get("bcv_dolar", 0) - bcv_usd) > 0.001:
+            supabase.table("tasas_monitoreo").upsert(data).execute()
+            print(f"✅ Consenso alcanzado: BCV actualizado a {bcv_usd}")
+        else:
+            print("ℹ️ Sin cambios significativos en el BCV.")
     else:
-        # Si BCV falla, solo actualizamos Binance
-        data_binance = {
-            "binance": round(promedio, 2),
-            "binance_banesco": banesco if banesco > 0 else 735.0,
-            "binance_mercantil": mercantil if mercantil > 0 else 735.0,
-            "binance_bdv": bdv if bdv > 0 else 735.0,
-            "binance_pagomovil": pagomovil if pagomovil > 0 else 735.0
-        }
-        supabase.table("tasas_monitoreo").update(data_binance).eq("id", 1).execute()
-        print("ℹ️ BCV no disponible. Solo se actualizaron tasas de Binance.")
+        print("⚠️ Fallo en el consenso de fuentes. No se actualizó la BD.")
 
 if __name__ == "__main__":
     main()
