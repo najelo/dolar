@@ -1,79 +1,37 @@
 import os
 import requests
-from datetime import datetime
 from supabase import create_client
 
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-
-def obtener_tasas_bcv_estrictas():
-    """
-    Intenta obtener Dólar y Euro BCV desde múltiples fuentes fiables.
-    Falla si TODAS las fuentes están caídas.
-    """
-    # Lista de fuentes (APIs espejo para redundancia)
-    fuentes = [
-        "https://ve.dolarapi.com/v1/dolares"
-    ]
+def actualizar_bcv():
+    # 1. Configuración de Supabase
+    url_supabase = os.getenv("SUPABASE_URL")
+    key_supabase = os.getenv("SUPABASE_KEY")
     
-    for url in fuentes:
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                # Extraer BCV dólar y euro
-                dolar_bcv = next(item for item in data if item['codigo'] == 'bcv')
-                euro_bcv = next(item for item in data if item['codigo'] == 'bcv-euro')
-                return float(dolar_bcv['promedio']), float(euro_bcv['promedio'])
-        except:
-            continue # Prueba la siguiente fuente si esta falla
-            
-    raise Exception("❌ Todas las fuentes de tasas BCV están siendo bloqueadas o caídas.")
+    if not url_supabase or not key_supabase:
+        print("❌ Error: Variables de entorno no configuradas")
+        return
 
-def obtener_binance_p2p(banco_nombre):
-    # Lógica de Binance sin cambios
-    url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
-    payload = {
-        "asset": "USDT", "fiat": "VES", "tradeType": "BUY",
-        "payTypes": [banco_nombre], "rows": 1, "page": 1, "proMerchantAds": False
-    }
+    supabase = create_client(url_supabase, key_supabase)
+    
+    # 2. Fuente de datos estática (No bloqueable)
+    url_json = "https://raw.githubusercontent.com/fuchibol/pydolarvenezuela/main/assets/data/currencies.json"
+    
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=15).json()
-        return float(resp['data'][0]['adv']['price']) if resp.get('data') else 0.0
-    except:
-        return 0.0
-
-def main():
-    try:
-        # Intentar obtener tasas oficiales
-        bcv_usd, bcv_eur = obtener_tasas_bcv_estrictas()
+        response = requests.get(url_json, timeout=15)
+        response.raise_for_status() # Verifica si hubo error en la petición
+        data = response.json()
         
-        # Binance P2P
-        banesco = obtener_binance_p2p("Banesco")
-        mercantil = obtener_binance_p2p("Mercantil")
-        bdv = obtener_binance_p2p("BancoDeVenezuela")
-        pagomovil = obtener_binance_p2p("PagoMovil")
+        # Extraemos el valor
+        precio_bcv = float(data['bcv']['dolar']['price'])
         
-        valores = [v for v in [banesco, mercantil, bdv, pagomovil] if v > 0]
-        promedio = sum(valores) / len(valores) if valores else 735.0
+        # 3. Actualización en Supabase
+        # id=1 es tu registro principal, ajusta si tu tabla usa otro ID
+        resultado = supabase.table("tasas_monitoreo").update({"bcv_dolar": precio_bcv}).eq("id", 1).execute()
         
-        data = {
-            "id": 1,
-            "bcv_dolar": bcv_usd,
-            "bcv_euro": bcv_eur,
-            "binance": round(promedio, 2),
-            "binance_banesco": banesco if banesco > 0 else 735.0,
-            "binance_mercantil": mercantil if mercantil > 0 else 735.0,
-            "binance_bdv": bdv if bdv > 0 else 735.0,
-            "binance_pagomovil": pagomovil if pagomovil > 0 else 735.0,
-            "ultima_actualizacion": datetime.now().isoformat()
-        }
-        
-        supabase.table("tasas_monitoreo").upsert(data).execute()
-        print(f"✅ Éxito: BCV USD {bcv_usd} | EUR {bcv_eur} actualizado.")
+        print(f"✅ BCV actualizado exitosamente a: {precio_bcv}")
         
     except Exception as e:
-        print(f"⚠️ Error crítico: {e}")
+        print(f"❌ Error crítico en el proceso de actualización: {e}")
 
 if __name__ == "__main__":
-    main()
+    actualizar_bcv()
