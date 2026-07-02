@@ -1,24 +1,28 @@
-name: Actualizar Tasas Automáticamente
+name: Actualizar Binance P2P
+
 on:
   schedule:
+    # Se ejecuta cada 15 minutos de cada hora
     - cron: '*/15 * * * *'
-  workflow_dispatch:
+  workflow_dispatch: # Permite ejecutarlo manualmente para pruebas
 
 jobs:
-  build:
+  update-binance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout del repositorio
+        uses: actions/checkout@v3
+
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+
       - name: Instalar dependencias
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r dolar_backend/requirements.txt
-      - name: Ejecutar Extractor
+        run: pip install requests supabase
+          
+      - name: Ejecutar script Binance
+        run: python dolar_backend/binance_service.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python dolar_backend/extractor.py
