@@ -1,37 +1,27 @@
-import os
 import requests
+from bs4 import BeautifulSoup
 from supabase import create_client
+import os
 
 def actualizar_bcv():
-    # 1. Configuración de Supabase
-    url_supabase = os.getenv("SUPABASE_URL")
-    key_supabase = os.getenv("SUPABASE_KEY")
-    
-    if not url_supabase or not key_supabase:
-        print("❌ Error: Variables de entorno no configuradas")
-        return
-
-    supabase = create_client(url_supabase, key_supabase)
-    
-    # 2. Fuente de datos estática (No bloqueable)
-    url_json = "https://raw.githubusercontent.com/fuchibol/pydolarvenezuela/main/assets/data/currencies.json"
-    
+    url = "https://www.bcv.org.ve/"
     try:
-        response = requests.get(url_json, timeout=15)
-        response.raise_for_status() # Verifica si hubo error en la petición
-        data = response.json()
+        # User-Agent para que el BCV no bloquee la petición
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Extraemos el valor
-        precio_bcv = float(data['bcv']['dolar']['price'])
+        # El precio del dólar en el BCV está en un div con id 'dolar'
+        dolar_text = soup.find('div', id='dolar').find('strong').text
+        tasa_bcv = float(dolar_text.replace(',', '.'))
         
-        # 3. Actualización en Supabase
-        # id=1 es tu registro principal, ajusta si tu tabla usa otro ID
-        resultado = supabase.table("tasas_monitoreo").update({"bcv_dolar": precio_bcv}).eq("id", 1).execute()
-        
-        print(f"✅ BCV actualizado exitosamente a: {precio_bcv}")
+        # Guardar en Supabase
+        supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+        supabase.table("tasas_monitoreo").update({"bcv": tasa_bcv}).eq("id", 1).execute()
+        print(f"✅ Tasa BCV actualizada: {tasa_bcv}")
         
     except Exception as e:
-        print(f"❌ Error crítico en el proceso de actualización: {e}")
+        print(f"❌ Error al obtener BCV: {e}")
 
 if __name__ == "__main__":
     actualizar_bcv()
