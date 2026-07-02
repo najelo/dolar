@@ -28,7 +28,6 @@ def obtener_tasa_flexible(palabra_clave):
 def actualizar_todo():
     supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
     
-    # Mapeo de columnas con palabras clave de búsqueda
     busquedas = {
         "binance_bdv": "Venezuela",
         "binance_pagomovil": "Movil",
@@ -40,8 +39,12 @@ def actualizar_todo():
     for col, clave in busquedas.items():
         precio = obtener_tasa_flexible(clave)
         if precio:
-            supabase.table("tasas_monitoreo").update({col: precio}).eq("id", 1).execute()
-            print(f"✅ {col} actualizado a: {precio}")
+            try:
+                # Intentamos actualizar, si falla, atrapamos el error y seguimos
+                supabase.table("tasas_monitoreo").update({col: precio}).eq("id", 1).execute()
+                print(f"✅ {col} actualizado a: {precio}")
+            except Exception as e:
+                print(f"⚠️ Error al guardar en columna {col} (Supabase la rechaza): {e}")
         else:
             print(f"⚠️ No se encontró tasa específica para {col}")
 
