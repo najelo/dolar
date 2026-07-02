@@ -1,1 +1,32 @@
+name: Actualizar Tasa BCV
 
+on:
+  schedule:
+    # 0 13,17,20 * * * significa:
+    # 13:00 UTC (9:00 AM Vzla)
+    # 17:00 UTC (1:00 PM Vzla)
+    # 20:00 UTC (4:00 PM Vzla)
+    - cron: '0 13,17,20 * * *'
+  workflow_dispatch: # Te permite ejecutarlo manualmente desde la pestaña Actions
+
+jobs:
+  update-bcv:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar dependencias
+        run: |
+          pip install requests supabase
+          
+      - name: Ejecutar script BCV
+        run: python dolar_backend/bcv_service.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
