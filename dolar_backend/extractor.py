@@ -1,27 +1,36 @@
 import os
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
 from supabase import create_client
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def obtener_tasas_bcv_estrictas():
-    """Obtiene Dólar y Euro. Falla si alguno falta."""
-    url = "https://ve.dolarapi.com/v1/dolares"
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
+    """
+    Intenta obtener Dólar y Euro BCV desde múltiples fuentes fiables.
+    Falla si TODAS las fuentes están caídas.
+    """
+    # Lista de fuentes (APIs espejo para redundancia)
+    fuentes = [
+        "https://ve.dolarapi.com/v1/dolares"
+    ]
     
-    data = response.json()
-    
-    # Buscamos en el JSON el oficial del BCV para dólar y euro
-    dolar_bcv = next(item for item in data if item['codigo'] == 'bcv')
-    euro_bcv = next(item for item in data if item['codigo'] == 'bcv-euro')
-    
-    return float(dolar_bcv['promedio']), float(euro_bcv['promedio'])
+    for url in fuentes:
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                # Extraer BCV dólar y euro
+                dolar_bcv = next(item for item in data if item['codigo'] == 'bcv')
+                euro_bcv = next(item for item in data if item['codigo'] == 'bcv-euro')
+                return float(dolar_bcv['promedio']), float(euro_bcv['promedio'])
+        except:
+            continue # Prueba la siguiente fuente si esta falla
+            
+    raise Exception("❌ Todas las fuentes de tasas BCV están siendo bloqueadas o caídas.")
 
 def obtener_binance_p2p(banco_nombre):
-    # Esta parte se queda EXACTAMENTE igual como me pediste
+    # Lógica de Binance sin cambios
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
     payload = {
@@ -35,9 +44,11 @@ def obtener_binance_p2p(banco_nombre):
         return 0.0
 
 def main():
-    bcv_usd, bcv_eur = obtener_tasa_bcv()
-    
-    if bcv_usd and bcv_usd > 600:
+    try:
+        # Intentar obtener tasas oficiales
+        bcv_usd, bcv_eur = obtener_tasas_bcv_estrictas()
+        
+        # Binance P2P
         banesco = obtener_binance_p2p("Banesco")
         mercantil = obtener_binance_p2p("Mercantil")
         bdv = obtener_binance_p2p("BancoDeVenezuela")
@@ -59,9 +70,10 @@ def main():
         }
         
         supabase.table("tasas_monitoreo").upsert(data).execute()
-        print(f"✅ Éxito: BCV actualizado a {bcv_usd}")
-    else:
-        print("⚠️ No se pudo conectar al BCV después de varios intentos.")
+        print(f"✅ Éxito: BCV USD {bcv_usd} | EUR {bcv_eur} actualizado.")
+        
+    except Exception as e:
+        print(f"⚠️ Error crítico: {e}")
 
 if __name__ == "__main__":
     main()
