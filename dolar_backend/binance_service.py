@@ -1,13 +1,29 @@
 import os
 import requests
+import random
+import time
+import logging
 from supabase import create_client
 
-def obtener_tasa_flexible(palabra_clave):
+# Configuración de log profesional
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def obtener_tasa_flexible(palabra_clave, session):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    
+    # Lista de User-Agents para evitar bloqueos por huella digital
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ]
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Referer": "https://p2p.binance.com/"
+        "User-Agent": random.choice(user_agents),
+        "Referer": "https://p2p.binance.com/",
+        "Content-Type": "application/json",
+        "Accept": "*/*"
     }
+    
     payload = {
         "asset": "USDT",
         "fiat": "VES",
@@ -18,26 +34,31 @@ def obtener_tasa_flexible(palabra_clave):
     }
     
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=15).json()
+        # Pausa aleatoria para simular lectura humana
+        time.sleep(random.uniform(2, 5))
         
-        if response and "data" in response and len(response["data"]) > 0:
-            for anuncio in response["data"]:
+        response = session.post(url, json=payload, headers=headers, timeout=15)
+        data = response.json()
+        
+        if data and "data" in data and len(data["data"]) > 0:
+            for anuncio in data["data"]:
                 anuncio_info = anuncio.get("adv", {})
                 metodos = anuncio_info.get("tradeMethods", [])
                 
-                # Buscar en métodos
                 for m in metodos:
                     if palabra_clave.lower() in m.get("tradeMethodName", "").lower():
                         return float(anuncio_info.get("price"))
             
-            # Respaldo: retornar el primer precio si no coincide con el banco
-            return float(response["data"][0]["adv"]["price"])
+            # Respaldo: primer precio disponible
+            return float(data["data"][0]["adv"]["price"])
             
     except Exception as e:
-        print(f"Error técnico al conectar: {e}")
+        logging.error(f"Error conectando con Binance para '{palabra_clave}': {e}")
     return None
 
 def actualizar_todo():
+    logging.info("Iniciando actualización P2P Binance...")
+    session = requests.Session()
     supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
     
     busquedas = {
@@ -47,16 +68,22 @@ def actualizar_todo():
         "binance_mercantil": "Mercantil"
     }
     
+    resultados = {}
     for col, clave in busquedas.items():
-        precio = obtener_tasa_flexible(clave)
+        precio = obtener_tasa_flexible(clave, session)
         if precio:
-            try:
-                supabase.table("tasas_monitoreo").update({col: precio}).eq("id", 1).execute()
-                print(f"✅ {col} actualizado a: {precio}")
-            except Exception as e:
-                print(f"⚠️ Error al guardar en {col}: {e}")
+            resultados[col] = precio
+            logging.info(f"✅ Precio {col} obtenido: {precio}")
         else:
-            print(f"⚠️ No se pudo obtener precio para {col}")
+            logging.warning(f"⚠️ No se pudo obtener precio para {col}")
+    
+    # Subida masiva a Supabase para ahorrar peticiones a la DB
+    if resultados:
+        try:
+            supabase.table("tasas_monitoreo").update(resultados).eq("id", 1).execute()
+            logging.info("🚀 Base de datos actualizada con éxito.")
+        except Exception as e:
+            logging.error(f"Error al guardar en Supabase: {e}")
 
 if __name__ == "__main__":
     actualizar_todo()
