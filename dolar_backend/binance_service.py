@@ -5,62 +5,82 @@ import time
 import logging
 from supabase import create_client
 
-# Configuración: Ahora el bot nos habla en español y con detalle
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+# Configuración de logs con formato amigable
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
-def log_humano(mensaje):
-    """Función para que el bot se reporte contigo."""
-    logging.info(f"🤖 Bot: {mensaje}")
+def log_humano(mensaje, estilo="🤖 Bot:"):
+    logging.info(f"{estilo} {mensaje}")
 
-def buscar_mejor_tasa(banco_clave, session):
+def buscar_mejor_tasa(banco_clave, session, ultima_tasa):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    
-    # Payload para venta (Tú vendes USDT)
-    payload = {
-    "asset": "USDT", 
-    "fiat": "VES", 
-    "tradeType": "BUY", 
-    "rows": 100,  # <-- 100 resultados, así es casi imposible que no aparezcan los bancos principales
-    "page": 1,
-    "payTypes": [] # Dejar vacío significa "dame todos los métodos"
-}
+    # Solicitamos 50 filas para asegurar cobertura
+    payload = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "rows": 50, "page": 1}
     
     try:
-        # Simulamos pausas humanas variables
-        time.sleep(random.uniform(4, 9))
-        res = session.post(url, json=payload, headers=headers, timeout=10).json()
+        time.sleep(random.uniform(4, 8))
+        res = session.post(url, json=payload, headers=headers, timeout=10)
+        data = res.json().get("data")
         
-        precios = [float(a["adv"]["price"]) for a in res.get("data", []) 
-                   if any(banco_clave.lower() in m["tradeMethodName"].lower() for m in a["adv"]["tradeMethods"])
-                   and 600 < float(a["adv"]["price"]) < 2000]
+        if data is None: return None
+            
+        precios = []
+        for a in data:
+            adv = a.get("adv", {})
+            precio = float(adv.get("price", 0))
+            metodos = adv.get("tradeMethods", [])
+            
+            if not isinstance(metodos, list): continue
+            
+            # Filtro inteligente de palabras clave
+            nombres = [m.get("tradeMethodName", "").lower() for m in metodos]
+            if banco_clave.lower() in str(nombres):
+                # Ventana flotante: solo descartamos si es una locura estadística
+                if precio > 50:
+                    if ultima_tasa and (precio > (ultima_tasa * 3) or precio < (ultima_tasa * 0.5)):
+                        continue 
+                    precios.append(precio)
         
         return max(precios) if precios else None
-    except Exception as e:
-        log_humano(f"Tuve un pequeño problema técnico al revisar {banco_clave}: {e}")
+    except:
         return None
 
 def ejecutar():
-    log_humano("Iniciando mi rutina de monitoreo...")
-    session = requests.Session()
-    db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+    frases_inicio = ["Echándole un ojo al mercado...", "Revisando qué tal se mueve el P2P...", "Iniciando mi rutina de monitoreo..."]
+    log_humano(random.choice(frases_inicio))
     
-    bancos = {"binance_bdv": "Venezuela", "binance_pagomovil": "Movil", "binance_banesco": "Banesco", "binance_mercantil": "Mercantil"}
+    session = requests.Session()
+    try:
+        db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+        ultima_data = db.table("tasas_monitoreo").select("*").eq("id", 1).execute().data
+        precios_previos = ultima_data[0] if ultima_data else {}
+    except:
+        precios_previos = {}
+
+    bancos = {
+        "binance_bdv": "Venezuela", 
+        "binance_pagomovil": "Pago Movil", 
+        "binance_banesco": "Banesco", 
+        "binance_mercantil": "Mercantil"
+    }
     
     resultados = {}
     for col, clave in bancos.items():
-        precio = buscar_mejor_tasa(clave, session)
+        precio = buscar_mejor_tasa(clave, session, precios_previos.get(col))
         if precio:
             resultados[col] = precio
-            log_humano(f"He encontrado una buena tasa en {col}: {precio} VES.")
+            log_humano(f"Encontré una buena tasa en {clave}: {precio} VES.")
         else:
-            log_humano(f"No logré encontrar ofertas activas para {col} en este momento.")
+            log_humano(f"No logré encontrar ofertas válidas para {clave} ahora mismo.")
 
     if resultados:
         db.table("tasas_monitoreo").update(resultados).eq("id", 1).execute()
-        log_humano("He terminado mi reporte y actualizado la base de datos. ¡Todo listo!")
+        # Comentario humano según el resultado
+        promedio = sum(resultados.values()) / len(resultados)
+        opinion = "El mercado está movido." if promedio > 800 else "Todo se ve tranquilo por hoy."
+        log_humano(f"He terminado mi reporte. {opinion} ¡Ya está todo guardado en la base de datos!")
     else:
-        log_humano("No pude actualizar nada, el mercado parece estar quieto.")
+        log_humano("El mercado parece estar un poco dormido. No pude actualizar nada esta vez.")
 
 if __name__ == "__main__":
     ejecutar()
