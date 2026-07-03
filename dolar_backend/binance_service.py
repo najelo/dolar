@@ -17,7 +17,14 @@ def buscar_mejor_tasa(banco_clave, session):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
     # Payload para venta (Tú vendes USDT)
-    payload = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "rows": 50, "page": 1}
+    payload = {
+    "asset": "USDT", 
+    "fiat": "VES", 
+    "tradeType": "BUY", 
+    "rows": 100,  # <-- 100 resultados, así es casi imposible que no aparezcan los bancos principales
+    "page": 1,
+    "payTypes": [] # Dejar vacío significa "dame todos los métodos"
+}
     
     try:
         # Simulamos pausas humanas variables
