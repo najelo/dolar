@@ -1,34 +1,55 @@
 import os
 import requests
+import random
+import time
+import urllib3
+from bs4 import BeautifulSoup
 from supabase import create_client
 
-def actualizar_tasas():
-    # Ya no necesitas headers, user-agents ni simulaciones
-    API_KEY = os.getenv("API_KEY_EXCHANGE") 
-    url = f"https://v6.exchangerate-api.com/v6/{API_KEY}/latest/USD"
+# Ignora advertencias de seguridad para evitar bloqueos por certificados SSL
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def obtener_tasa_bcv():
+    url = "https://www.bcv.org.ve/"
     
+    # 1. Headers que engañan al servidor haciéndole creer que eres un navegador real
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.9',
+        'Referer': 'https://www.google.com/'
+    }
+
     try:
-        # Petición directa y limpia
-        response = requests.get(url)
-        data = response.json()
+        # 2. Simulamos tiempo de carga de página
+        time.sleep(random.uniform(3, 7))
         
-        if data["result"] == "success":
-            tasa_usd_ves = data["conversion_rates"]["VES"]
-            # Calcular euro (tasa cruzada)
-            tasa_eur_usd = data["conversion_rates"]["EUR"]
-            tasa_eur_ves = tasa_usd_ves / tasa_eur_usd
-            
-            supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-            
-            supabase.table("tasas_monitoreo").update({
-                "bcv_dolar": tasa_usd_ves,
-                "bcv_euro": tasa_eur_ves
-            }).eq("id", 1).execute()
-            
-            print(f"✅ Éxito: {tasa_usd_ves} VES/USD")
-        
+        session = requests.Session()
+        response = session.get(url, headers=headers, timeout=20, verify=False)
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # 3. Extracción específica de las tasas
+        # El BCV agrupa las tasas en recuadros con esta clase
+        tasas = {}
+        recuadros = soup.find_all('div', class_='recuadro_tipo_cambio')
+
+        for item in recuadros:
+            nombre = item.find('label').text.strip()
+            valor = item.find('strong').text.strip().replace(',', '.')
+            if "Dólar" in nombre:
+                tasas["bcv_dolar"] = float(valor)
+            elif "Euro" in nombre:
+                tasas["bcv_euro"] = float(valor)
+
+        return tasas
+
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error al extraer: {e}")
+        return None
 
 if __name__ == "__main__":
-    actualizar_tasas()
+    datos = obtener_tasa_bcv()
+    if datos:
+        supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+        supabase.table("tasas_monitoreo").update(datos).eq("id", 1).execute()
+        print(f"✅ Tasa oficial BCV actualizada: {datos}")
