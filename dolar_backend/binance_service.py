@@ -26,7 +26,7 @@ def buscar_mejor_tasa(banco_clave, session):
         
         precios = [float(a["adv"]["price"]) for a in res.get("data", []) 
                    if any(banco_clave.lower() in m["tradeMethodName"].lower() for m in a["adv"]["tradeMethods"])
-                   and 10 < float(a["adv"]["price"]) < 600]
+                   and 600 < float(a["adv"]["price"]) < 2000]
         
         return max(precios) if precios else None
     except Exception as e:
