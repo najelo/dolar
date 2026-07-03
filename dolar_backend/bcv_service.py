@@ -15,13 +15,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 def ejecutar_servicio():
     logging.info("Iniciando jornada de actualización de tasas...")
     
-    # 1. Navegación con actitud humana
-    # Añadimos un pequeño retraso aleatorio para no ser "acelerados"
     time.sleep(random.uniform(10, 20))
     
     url = "https://www.bcv.org.ve/"
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/127.0.0.0'
     }
 
     try:
@@ -35,7 +33,7 @@ def ejecutar_servicio():
         soup = BeautifulSoup(response.content, 'html.parser')
         datos = {}
 
-        # Extracción
+        # Extracción de tasas
         for moneda in ['dolar', 'euro']:
             div = soup.find('div', id=moneda)
             if div:
@@ -44,12 +42,19 @@ def ejecutar_servicio():
                 logging.info(f"Éxito: Tasa de {moneda} capturada: {valor_str}")
             else:
                 logging.error(f"¡Atención! No encontré el contenedor de {moneda}.")
+        
+        # --- NUEVA EXTRACCIÓN DE FECHA ---
+        fecha_div = soup.find('div', class_='date-display')
+        if fecha_div:
+            datos['fecha_bcv'] = fecha_div.text.strip()
+            logging.info(f"Éxito: Fecha capturada: {datos['fecha_bcv']}")
+        # ---------------------------------
 
         # Guardado en Supabase
         if datos:
             supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
             supabase.table("tasas_monitoreo").update(datos).eq("id", 1).execute()
-            logging.info("Resumen final: Tasas publicadas en base de datos correctamente.")
+            logging.info("Resumen final: Tasas y fecha publicadas en base de datos correctamente.")
         else:
             logging.error("No se pudo completar la actualización debido a datos incompletos.")
 
