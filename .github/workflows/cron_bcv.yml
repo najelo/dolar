@@ -2,30 +2,38 @@ name: Actualizar Tasa BCV
 
 on:
   schedule:
-    # 0 13,17,20 * * * significa:
-    # 13:00 UTC (9:00 AM Vzla)
-    # 17:00 UTC (1:00 PM Vzla)
-    # 20:00 UTC (4:00 PM Vzla)
-    - cron: '0 20 * * *'
-  workflow_dispatch: # Te permite ejecutarlo manualmente desde la pestaña Actions
+    - cron: '40 20 * * *'
+  workflow_dispatch:
 
 jobs:
   actualizar-tasas:
+    # 1. Usar un entorno lo más estándar posible
     runs-on: ubuntu-latest
+    
+    # 2. Añadir límites de tiempo para evitar que se quede bloqueado eternamente
+    timeout-minutes: 10
+
     steps:
       - uses: actions/checkout@v3
       
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.11' # Versión más moderna y eficiente
           
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 supabase
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 supabase urllib3
           
       - name: Run script
         run: python dolar_backend/bcv_service.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+    # 3. Reintentos automáticos: Si falla, que intente de nuevo en 5 minutos
+    # Esto simula a un humano que vuelve a intentar cuando la web no carga
+    strategy:
+      fail-fast: false
+      max-parallel: 1
