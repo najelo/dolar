@@ -4,64 +4,42 @@ import random
 import time
 import logging
 from supabase import create_client
+from datetime import datetime
 
-# Configuración de logs limpia
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
-def log_humano(mensaje, estilo="🤖 Bot:"):
-    logging.info(f"{estilo} {mensaje}")
+def log_humano(mensaje, estilo="🤖 Bot:"): logging.info(f"{estilo} {mensaje}")
 
 def get_session():
     s = requests.Session()
-    s.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Referer": "https://p2p.binance.com/es/trade/sell-usdt/venezuela",
-        "Accept": "application/json, text/plain, */*"
-    })
+    s.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/126.0.0.0"})
     return s
 
-def buscar_mejor_tasa(banco_clave, session, ultima_tasa):
+def buscar_mejor_tasa(banco_clave, session):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
     precios = []
     
-    # Navegación por páginas: para no pedir 100 resultados de golpe
     for pagina in [1, 2]:
         payload = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "rows": 50, "page": pagina}
-        
         try:
-            # Espera irregular para simular a un humano leyendo
-            time.sleep(random.uniform(10, 20)) 
+            time.sleep(random.uniform(5, 10)) # Espera un poco más corta
             res = session.post(url, json=payload, timeout=15)
             data = res.json().get("data", [])
-            
             if not data: continue
-                
             for a in data:
                 adv = a.get("adv", {})
                 precio = float(adv.get("price", 0))
                 nombres = " ".join([m.get("tradeMethodName", "").lower() for m in adv.get("tradeMethods", [])])
-                
                 if banco_clave.lower() in nombres:
-                    if 50 < precio < 5000:
-                        if ultima_tasa and (precio > (ultima_tasa * 2.5) or precio < (ultima_tasa * 0.4)):
-                            continue
-                        precios.append(precio)
-        except:
-            continue
+                    precios.append(precio)
+        except: continue
             
     return max(precios) if precios else None
 
 def ejecutar():
-    log_humano(random.choice(["Echándole un ojo al mercado...", "Revisando qué tal se mueve el P2P..."]))
+    log_humano("Revisando mercado P2P...")
     session = get_session()
     
-    try:
-        db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-        ultima_data = db.table("tasas_monitoreo").select("*").eq("id", 1).execute().data
-        precios_previos = ultima_data[0] if ultima_data else {}
-    except:
-        precios_previos = {}
-
     bancos = {
         "binance_bdv": "venezuela", 
         "binance_pagomovil": "pago", 
@@ -71,19 +49,19 @@ def ejecutar():
     
     resultados = {}
     for col, clave in bancos.items():
-        precio = buscar_mejor_tasa(clave, session, precios_previos.get(col))
+        precio = buscar_mejor_tasa(clave, session)
         if precio:
             resultados[col] = precio
-            log_humano(f"Tasa encontrada en {clave}: {precio} VES.")
+            log_humano(f"Tasa encontrada en {col}: {precio} VES.")
             
     if resultados:
+        resultados['fecha_binance'] = datetime.now().isoformat()
         try:
+            db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
             db.table("tasas_monitoreo").update(resultados).eq("id", 1).execute()
-            log_humano("Reporte listo y guardado. ¡Todo al día!")
-        except:
-            log_humano("No pude guardar en la base de datos.")
-    else:
-        log_humano("El mercado parece estar tranquilo o no hay coincidencias ahora mismo.")
+            log_humano("Reporte Binance guardado.")
+        except Exception as e:
+            log_humano(f"Error al guardar: {e}")
 
 if __name__ == "__main__":
     ejecutar()
