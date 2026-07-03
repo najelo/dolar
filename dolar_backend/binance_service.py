@@ -29,6 +29,7 @@ def buscar_mejor_tasa(banco_clave, session, ultima_tasa):
             adv = a.get("adv", {})
             precio = float(adv.get("price", 0))
             metodos = adv.get("tradeMethods", [])
+            nombres = [m.get("tradeMethodName", "").lower() for m in metodos]
             
             if not isinstance(metodos, list): continue
             
@@ -40,6 +41,8 @@ def buscar_mejor_tasa(banco_clave, session, ultima_tasa):
                     if ultima_tasa and (precio > (ultima_tasa * 3) or precio < (ultima_tasa * 0.5)):
                         continue 
                     precios.append(precio)
+                    if random.random() < 0.2: # Solo imprime a veces para no llenar la consola
+            log_humano(f"Vi anuncios con métodos: {nombres}")
         
         return max(precios) if precios else None
     except:
