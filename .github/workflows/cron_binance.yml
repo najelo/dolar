@@ -3,7 +3,7 @@ name: Actualizar Binance P2P
 on:
   schedule:
     # Se ejecuta cada 15 minutos de cada hora
-    - cron: '*/15 * * * *'
+    - cron: '12 * * * *'
   workflow_dispatch: # Permite ejecutarlo manualmente para pruebas
 
 jobs:
