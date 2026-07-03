@@ -5,85 +5,55 @@ import time
 import logging
 from supabase import create_client
 
-# Configuración de log profesional
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configuración: Ahora el bot nos habla en español y con detalle
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
-def obtener_tasa_flexible(palabra_clave, session):
+def log_humano(mensaje):
+    """Función para que el bot se reporte contigo."""
+    logging.info(f"🤖 Bot: {mensaje}")
+
+def buscar_mejor_tasa(banco_clave, session):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
-    # Lista de User-Agents para evitar bloqueos por huella digital
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-    ]
-    
-    headers = {
-        "User-Agent": random.choice(user_agents),
-        "Referer": "https://p2p.binance.com/",
-        "Content-Type": "application/json",
-        "Accept": "*/*"
-    }
-    
-    payload = {
-        "asset": "USDT",
-        "fiat": "VES",
-        "tradeType": "SELL",
-        "rows": 10,
-        "page": 1,
-        "payTypes": [] 
-    }
+    # Payload para venta (Tú vendes USDT)
+    payload = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "rows": 20, "page": 1}
     
     try:
-        # Pausa aleatoria para simular lectura humana
-        time.sleep(random.uniform(2, 5))
+        # Simulamos pausas humanas variables
+        time.sleep(random.uniform(4, 9))
+        res = session.post(url, json=payload, headers=headers, timeout=10).json()
         
-        response = session.post(url, json=payload, headers=headers, timeout=15)
-        data = response.json()
+        precios = [float(a["adv"]["price"]) for a in res.get("data", []) 
+                   if any(banco_clave.lower() in m["tradeMethodName"].lower() for m in a["adv"]["tradeMethods"])
+                   and 10 < float(a["adv"]["price"]) < 600]
         
-        if data and "data" in data and len(data["data"]) > 0:
-            for anuncio in data["data"]:
-                anuncio_info = anuncio.get("adv", {})
-                metodos = anuncio_info.get("tradeMethods", [])
-                
-                for m in metodos:
-                    if palabra_clave.lower() in m.get("tradeMethodName", "").lower():
-                        return float(anuncio_info.get("price"))
-            
-            # Respaldo: primer precio disponible
-            return float(data["data"][0]["adv"]["price"])
-            
+        return max(precios) if precios else None
     except Exception as e:
-        logging.error(f"Error conectando con Binance para '{palabra_clave}': {e}")
-    return None
+        log_humano(f"Tuve un pequeño problema técnico al revisar {banco_clave}: {e}")
+        return None
 
-def actualizar_todo():
-    logging.info("Iniciando actualización P2P Binance...")
+def ejecutar():
+    log_humano("Iniciando mi rutina de monitoreo...")
     session = requests.Session()
-    supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+    db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
     
-    busquedas = {
-        "binance_bdv": "Venezuela",
-        "binance_pagomovil": "Movil",
-        "binance_banesco": "Banesco",
-        "binance_mercantil": "Mercantil"
-    }
+    bancos = {"binance_bdv": "Venezuela", "binance_pagomovil": "Movil", "binance_banesco": "Banesco", "binance_mercantil": "Mercantil"}
     
     resultados = {}
-    for col, clave in busquedas.items():
-        precio = obtener_tasa_flexible(clave, session)
+    for col, clave in bancos.items():
+        precio = buscar_mejor_tasa(clave, session)
         if precio:
             resultados[col] = precio
-            logging.info(f"✅ Precio {col} obtenido: {precio}")
+            log_humano(f"He encontrado una buena tasa en {col}: {precio} VES.")
         else:
-            logging.warning(f"⚠️ No se pudo obtener precio para {col}")
-    
-    # Subida masiva a Supabase para ahorrar peticiones a la DB
+            log_humano(f"No logré encontrar ofertas activas para {col} en este momento.")
+
     if resultados:
-        try:
-            supabase.table("tasas_monitoreo").update(resultados).eq("id", 1).execute()
-            logging.info("🚀 Base de datos actualizada con éxito.")
-        except Exception as e:
-            logging.error(f"Error al guardar en Supabase: {e}")
+        db.table("tasas_monitoreo").update(resultados).eq("id", 1).execute()
+        log_humano("He terminado mi reporte y actualizado la base de datos. ¡Todo listo!")
+    else:
+        log_humano("No pude actualizar nada, el mercado parece estar quieto.")
 
 if __name__ == "__main__":
-    actualizar_todo()
+    ejecutar()
