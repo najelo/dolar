@@ -1,8 +1,7 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 from supabase import create_client
-import os
-import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
