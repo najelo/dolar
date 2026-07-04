@@ -27,16 +27,14 @@ def buscar_mejor_tasa(banco_nombre, banco_clave, session):
         precios = []
         for a in data:
             adv = a.get("adv", {})
-            # Manejo seguro para evitar 'NoneType'
             methods = adv.get("tradeMethods") or []
             for m in methods:
                 name = m.get("tradeMethodName") or ""
                 if banco_clave in name.lower():
                     precios.append(float(adv.get("price", 0)))
-        
         return max(precios) if precios else None
     except Exception as e:
-        logging.error(f"Error en red/parsing para {banco_nombre}: {e}")
+        logging.error(f"Error procesando {banco_nombre}: {e}")
         return None
 
 def ejecutar():
@@ -56,8 +54,9 @@ def ejecutar():
         precio = buscar_mejor_tasa(nombre, clave, session)
         
         if precio:
-            # 1. Intentar guardar en historial (bloque independiente)
+            # 1. GUARDAR HISTORIAL
             try:
+                # Quitamos cualquier campo que el trigger pueda estar rechazando
                 supabase.table("historial_tasas").insert({
                     "banco": nombre,
                     "valor": precio,
@@ -65,17 +64,18 @@ def ejecutar():
                 }).execute()
                 logging.info(f"💾 Guardado en Historial: {nombre}")
             except Exception as e:
-                logging.warning(f"⚠️ Error al insertar en historial (Trigger?): {e}")
+                logging.warning(f"⚠️ Aviso en Historial (puede haber un trigger activo): {e}")
             
-            # 2. Intentar actualizar tabla principal (bloque independiente)
-            # He quitado 'fecha_binance' por si es la causa del error 400
+            # 2. ACTUALIZAR MONITOREO
             try:
+                # Solo enviamos el valor y la fecha, eliminando complicaciones
                 supabase.table("tasas_monitoreo").update({
-                    columna_db: precio
+                    columna_db: precio,
+                    "fecha_binance": ahora
                 }).eq("id", 1).execute()
-                logging.info(f"🔄 Actualizado en tabla principal: {nombre}")
+                logging.info(f"🔄 Actualizado en monitoreo: {nombre} = {precio}")
             except Exception as e:
-                logging.error(f"❌ Error al actualizar tasa en Supabase: {e}")
+                logging.error(f"❌ Error crítico en actualización: {e}")
         
         time.sleep(random.uniform(3, 6))
 
