@@ -6,11 +6,8 @@ import logging
 from supabase import create_client
 from datetime import datetime
 
-# Configuración de logs
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-
-def log_humano(mensaje):
-    logging.info(f"🤖 Bot: {mensaje}")
+# Configuración de logs con formato más profesional
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - 🤖 %(message)s')
 
 def get_session():
     s = requests.Session()
@@ -21,66 +18,72 @@ def get_session():
     })
     return s
 
-def buscar_mejor_tasa(banco_clave, session):
+def buscar_mejor_tasa(banco_nombre, banco_clave, session):
     url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
-    precios = []
     
-    # Buscamos en varias páginas
-    for pagina in [1, 2, 3]: 
-        payload = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "rows": 20, "page": pagina}
-        try:
-            time.sleep(random.uniform(5, 8)) 
-            res = session.post(url, json=payload, timeout=15)
-            data = res.json().get("data", [])
+    # Payload para buscar (BUY USDT, Fiat VES)
+    payload = {"asset": "USDT", "fiat": "VES", "tradeType": "BUY", "rows": 20, "page": 1}
+    
+    try:
+        logging.info(f"Escaneando ofertas para: {banco_nombre}...")
+        res = session.post(url, json=payload, timeout=15)
+        data = res.json().get("data", [])
+        
+        precios = []
+        for a in data:
+            adv = a.get("adv", {})
+            metodos = [m.get("tradeMethodName", "").lower() for m in adv.get("tradeMethods", [])]
             
-            for a in data:
-                adv = a.get("adv", {})
-                precio = float(adv.get("price", 0))
-                # Extraemos nombres de métodos de pago
-                metodos = [m.get("tradeMethodName", "").lower() for m in adv.get("tradeMethods", [])]
-                nombres = " ".join(metodos)
-                
-                # --- DEPURACIÓN ---
-                # Esto te dirá qué nombres está viendo el bot para que sepas por qué no coincide
-                # log_humano(f"Analizando: {nombres} -> Precio: {precio}") 
-                
-                if banco_clave.lower() in nombres:
-                    precios.append(precio)
-        except Exception as e:
-            log_humano(f"Error en página {pagina}: {e}")
-            continue
+            # Verificamos si la clave del banco está en los métodos de pago
+            if any(banco_clave in m for m in metodos):
+                precios.append(float(adv.get("price", 0)))
+        
+        if precios:
+            mejor_precio = max(precios)
+            logging.info(f"✅ Encontrado: {banco_nombre} a {mejor_precio}")
+            return mejor_precio
             
-    return max(precios) if precios else None
+        logging.warning(f"⚠️ No hay ofertas activas para {banco_nombre}")
+        return None
+        
+    except Exception as e:
+        logging.error(f"Error conectando con Binance para {banco_nombre}: {e}")
+        return None
 
 def ejecutar():
-    log_humano("Iniciando jornada...")
+    logging.info("--- INICIANDO JORNADA BINANCE ---")
     session = get_session()
     
-    # Ajuste de claves para que coincidan mejor con Binance (ej: "pago movil" en lugar de "pago")
-    bancos = {
-        "binance_bdv": "venezuela", 
-        "binance_pagomovil": "pago", 
-        "binance_banesco": "banesco", 
-        "binance_mercantil": "mercantil"
-    }
+    # Definición de bancos: nombre_amigable, clave_de_busqueda
+    bancos_a_buscar = [
+        ("BDV", "venezuela"),
+        ("PagoMóvil", "pago"),
+        ("Banesco", "banesco"),
+        ("Mercantil", "mercantil")
+    ]
     
-    resultados = {}
-    for col, clave in bancos.items():
-        precio = buscar_mejor_tasa(clave, session)
+    supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+    
+    for nombre, clave in bancos_a_buscar:
+        precio = buscar_mejor_tasa(nombre, clave, session)
+        
         if precio:
-            resultados[col] = precio
-            log_humano(f"¡Éxito! Encontré {col} a {precio}")
-        else:
-            log_humano(f"No pude encontrar ninguna oferta para {col}")
-            
-    if resultados:
-        resultados['fecha_binance'] = datetime.now().isoformat()
-        try:
-            db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-            db.table("tasas_monitoreo").update(resultados).eq("id", 1).execute()
-            log_humano("Datos guardados en Supabase.")
-        except Exception as e:
-            log_humano(f"Error al guardar: {e}")
+            # Guardamos cada banco como una fila independiente en el historial
+            payload = {
+                "banco": nombre,
+                "valor": precio,
+                "fecha_registro": datetime.now().isoformat()
+            }
+            try:
+                supabase.table("historial_tasas").insert(payload).execute()
+                logging.info(f"Guardado en Historial: {nombre}")
+            except Exception as e:
+                logging.error(f"Error guardando en Supabase: {e}")
+        
+        # Pequeña pausa para no parecer un bot agresivo
+        time.sleep(random.uniform(3, 6))
+
+    logging.info("--- PROCESO BINANCE FINALIZADO ---")
 
 if __name__ == "__main__":
     ejecutar()
