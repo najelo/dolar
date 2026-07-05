@@ -6,28 +6,29 @@ from bs4 import BeautifulSoup
 from supabase import create_client
 from datetime import datetime
 
-# Configuración de log
+# Configuración
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+def enviar_telegram(mensaje):
+    token = os.getenv("TELEGRAM_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id: return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": mensaje, "parse_mode": "Markdown"}
+    requests.post(url, data=payload, timeout=10)
+
 def ejecutar_servicio():
-    logging.info("--- INICIANDO PROCESO DE EXTRACCIÓN ---")
-    
     try:
         supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
         url = "https://www.bcv.org.ve/"
         headers = {'User-Agent': 'Mozilla/5.0'}
         
-        logging.info(f"Conectando a {url}...")
         response = requests.get(url, headers=headers, timeout=40, verify=False)
-        
-        if response.status_code != 200:
-            logging.error(f"Error de conexión: {response.status_code}")
-            return
+        if response.status_code != 200: return
         
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # Procesar divisas
         for moneda in ['dolar', 'euro']:
             div = soup.find('div', id=moneda)
             if div:
@@ -35,24 +36,22 @@ def ejecutar_servicio():
                 valor_float = float(valor_raw.replace(',', '.'))
                 nombre_banco = "BCV USD" if moneda == 'dolar' else "BCV EURO"
                 
-                # --- AQUÍ ESTÁ EL CAMBIO ---
-                # Usamos una única columna: fecha_registro
                 payload = {
                     "banco": nombre_banco,
                     "valor": valor_float,
-                    "fecha_registro": datetime.now().isoformat() 
+                    "fecha_registro": datetime.now().isoformat()
                 }
                 
-                logging.info(f"Guardando: {nombre_banco} | Valor: {valor_float}")
+                # 1. Guardar en Supabase
                 supabase.table("historial_tasas").insert(payload).execute()
-                logging.info("ÉXITO: Registro insertado con fecha estandarizada.")
-            else:
-                logging.warning(f"No se encontró: {moneda}")
-
-        logging.info("--- PROCESO FINALIZADO ---")
+                
+                # 2. Notificar por Telegram usando el mismo script
+                enviar_telegram(f"✅ *Tasa Actualizada*\n{nombre_banco}: *Bs. {valor_float}*")
+                logging.info(f"ÉXITO: {nombre_banco} guardado y notificado.")
 
     except Exception as e:
-        logging.error(f"CRÍTICO: Error inesperado: {e}")
+        logging.error(f"CRÍTICO: {e}")
+        enviar_telegram(f"❌ *Error en el Bot*: {str(e)}")
 
 if __name__ == "__main__":
     ejecutar_servicio()
